@@ -1,0 +1,78 @@
+Name:                danecheck
+Version:             0.1.0.0
+Synopsis:            DANE SMTP checker
+Description:         Check DANE TLSA security of an email domain
+License:             BSD3
+License-File:        LICENSE
+Author:              Viktor Dukhovni (with contributions from Peter Duchovni)
+Maintainer:          postfix-users@dukhovni.org
+Category:            Commands
+Build-Type:          Simple
+Cabal-Version:       >= 1.24
+
+Executable danecheck
+  HS-Source-Dirs: "."
+  Default-Language: Haskell2010
+  GHC-Options: -Wall -O
+  Main-Is: Dane/Scanner/Main.hs
+
+  Other-Extensions:
+    FlexibleContexts
+    OverloadedStrings
+    PatternSynonyms
+    RecordWildCards
+    ViewPatterns
+
+  Other-Modules:
+    Dane.Scanner.State
+    Dane.Scanner.Util
+    Dane.Scanner.DNS.Dane
+    Dane.Scanner.DNS.Lookup
+    Dane.Scanner.DNS.Response
+    Dane.Scanner.DNS.Toascii
+    Dane.Scanner.Opts
+    Dane.Scanner.SMTP.Addr
+    Dane.Scanner.SMTP.Certs
+    Dane.Scanner.SMTP.Chain
+    Dane.Scanner.SMTP.Internal
+    Dane.Scanner.SMTP.Parse
+    Dane.Scanner.SMTP.Proto
+    Dane.Scanner.SMTP.Sock
+    Dane.Scanner.SMTP.TLS
+
+  Build-Depends:
+    asn1-encoding,
+    asn1-types,
+    attoparsec,
+    base >= 4.9,
+    base16-bytestring,
+    bytestring,
+    clock,
+    conduit,
+    conduit-combinators,
+    containers,
+    cryptonite,
+    data-default-class,
+    dns,
+    hostname,
+    hourglass,
+    idna,
+    iproute,
+    lifted-base,
+    memory,
+    monad-control,
+    mtl,
+    network,
+    optparse-applicative,
+    safe-exceptions,
+    stm,
+    text,
+    tls,
+    transformers,
+    transformers-base,
+    unix,
+    unix-time,
+    x509,
+    x509-store,
+    x509-system,
+    x509-validation

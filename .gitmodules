@@ -1,0 +1,9 @@
+[submodule "pkgs/optparse-applicative"]
+	path = pkgs/optparse-applicative
+	url = https://github.com/pcapriotti/optparse-applicative.git
+[submodule "pkgs/dns"]
+	path = pkgs/dns
+	url = https://github.com/kazu-yamamoto/dns.git
+[submodule "pkgs/idna-hs"]
+	path = pkgs/idna-hs
+	url = https://github.com/vdukhovni/idna-hs.git
