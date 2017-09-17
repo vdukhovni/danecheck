@@ -334,7 +334,7 @@ instance Show Response where
       -- RData output.
       --
       showResp rc ad ad' (alias:[]) bad cname typ rds =
-        sAns (show NoErr) ad' alias CNAME (BC.unpack cname) ++
+        sAns (show NoErrorRC) ad' alias CNAME (BC.unpack cname) ++
           showResp rc ad ad [] bad cname typ rds
 
       -- Two or more valid CNAMEs.  Only the first one gets tagged with the

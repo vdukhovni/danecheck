@@ -190,7 +190,7 @@ your TLD, you can proceed to regularly test your own domain.  Example:
     openssl.org. IN MX 50 mta.openssl.org. ; NoError AD=1
     mta.openssl.org. IN A 194.97.150.230 ; NoError AD=1
     mta.openssl.org. IN AAAA 2001:608:c00:180::1:e6 ; NoError AD=1
-    _25._tcp.mta.openssl.org. IN CNAME wildcard._dane.openssl.org. ; NoErr AD=1
+    _25._tcp.mta.openssl.org. IN CNAME wildcard._dane.openssl.org. ; NoError AD=1
     wildcard._dane.openssl.org. IN TLSA 3 1 1 687c07fbe249...b911c93ecaca ; NoError AD=1
       mta.openssl.org[194.97.150.230]: pass: TLSA match: depth = 0, name = openssl.org
         TLS = TLS12 with ECDHE-RSA-AES256GCM-SHA384
