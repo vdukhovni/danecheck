@@ -122,7 +122,9 @@ of the cloned project run
 which will compile and install a copy of the `danecheck` executable in
 Stack's default installation directory (typically ~/.local/bin).
 
-## Choose a working DNSSEC-validating resolver
+## Getting Started
+
+### Choose a working DNSSEC-validating resolver
 
 It is assumed by default that your system has a working DNSSEC-validating
 resolver (BIND 9, unbound or similar) running locally and listening on
@@ -132,8 +134,6 @@ The system's `/etc/resolv.conf` file is not used.  If you want to
 specify a different validating resolver, use the `-n` option to
 specify an alternative IP address.  The port number cannot be
 changed at present.
-
-## Getting Started
 
 ### Check that the software and resolver are working
 
