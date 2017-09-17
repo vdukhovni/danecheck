@@ -2,7 +2,7 @@
 
 ## Features
 
-- Test the local resover configuration by verifying the validity of
+- Test the local resolver configuration by verifying the validity of
   the root zone DNSKEY and SOA RRSets.
 
 - Test whether DNSSEC is enabled for a given TLD.
@@ -17,9 +17,9 @@
 
 A non-zero exit status is returned if any DNS lookups fail or if the
 MX records or MX hosts are in an unsigned zone, or if for one of the
-MX hosts no associted secure TLSA records are found.  A non-zero exit
+MX hosts no associated secure TLSA records are found.  A non-zero exit
 status is also returned if any of the SMTP connections fail to establish
-a TLS connection or yield a certificat chain that does not match the
+a TLS connection or yield a certificate chain that does not match the
 TLSA records.
 
 Note that `danecheck` prefers ECDSA to RSA, and only makes one
@@ -94,7 +94,7 @@ website, and are also available as packages for various operating systems.
       $ stack upgrade
       $ stack update
 
-### Developement libraries and headers
+### Development libraries and headers
 
 Some of the Haskell packages required for `danecheck` depend on
 optional C-libraries that may require the installation of additional
