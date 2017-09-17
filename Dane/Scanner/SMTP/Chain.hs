@@ -65,20 +65,43 @@ data PeerChain =
   | SmtpError SmtpState Int String
   | ChainException SomeException
 
+-- | https://www.iana.org/assignments/iana-ipv4-special-registry
+--
 reserved4 :: [ AddrRange IPv4 ]
-reserved4  =
-    [ (makeAddrRange (toIPv4 [127,0,0,0]) 8)     -- loopback
-    , (makeAddrRange (toIPv4 [10,0,0,0]) 8)      -- RFC1918
-    , (makeAddrRange (toIPv4 [172,16,0,0]) 12)   -- RFC1918
-    , (makeAddrRange (toIPv4 [192,168,0,0]) 16)  -- RFC1918
-    , (makeAddrRange (toIPv4 [192,0,2,0]) 24)    -- doc
-    , (makeAddrRange (toIPv4 [224,0,0,0]) 4)     -- multicast
-    , (makeAddrRange (toIPv4 [240,0,0,0]) 4)     -- reserved
+reserved4 = map (makeAddrRange <$> toIPv4 . fst <*> snd)
+    [ ( [0,0,0,0], 8 )       -- RFC1122
+    , ( [10,0,0,0], 8 )      -- RFC1918
+    , ( [100,64,0,0], 10 )   -- RFC6598
+    , ( [127,0,0,0], 8 )     -- RFC1122
+    , ( [169,254,0,0], 16 )  -- RFC3927
+    , ( [172,16,0,0], 12 )   -- RFC1918
+    , ( [192,0,0,0], 24 )    -- RFC6890
+    , ( [192,0,2,0], 24 )    -- RFC5737
+    , ( [192,31,196,0], 24 ) -- RFC7535
+    , ( [192,52,193,0], 24 ) -- RFC7450
+    , ( [192,88,99,0], 24 )  -- RFC3068
+    , ( [192,168,0,0], 16 )  -- RFC1918
+    , ( [192,175,48,0], 24 ) -- RFC7534
+    , ( [198,18,0,0], 15 )   -- RFC2544
+    , ( [198,51,100,0], 24 ) -- RFC5737
+    , ( [203,0,113,0], 24 )  -- RFC5737
+    , ( [224,0,0,0], 4 )     -- RFC1112
+    , ( [240,0,0,0], 4 )     -- RFC1112
     ]
+
+-- | https://www.iana.org/assignments/iana-ipv6-special-registry
+--
 reserved6 :: [ AddrRange IPv6 ]
-reserved6 =
-    [ (makeAddrRange (toIPv6 [0,0,0,0,0,0,0,1]) 128)     -- loopback
-    , (makeAddrRange (toIPv6 [0,0,0,0,0,0,0xffff,0]) 96) -- mapped IPv4
+reserved6 = map (makeAddrRange <$> toIPv6 . fst <*> snd)
+    [ ( [0,0,0,0,0,0,0,0], 128 )             -- RFC4291
+    , ( [0,0,0,0,0,0,0,1], 128 )             -- RFC4291
+    , ( [0,0,0,0,0,0,0xffff,0], 96 )         -- RFC4291
+    , ( [64,0xff9b,0,0,0,0,0,0], 96 )        -- RFC6052
+    , ( [100,0,0,0,0,0,0,0], 64 )            -- RFC6666
+    , ( [0x2001,0,0,0,0,0,0,0], 23 )         -- RFC2928
+    , ( [0x2620,0x4f,0x8000,0,0,0,0,0], 48 ) -- RFC7534
+    , ( [0xfc00,0,0,0,0,0,0,0], 7 )          -- RFC4193
+    , ( [0xfe80,0,0,0,0,0,0,0], 10 )         -- RFC4291
     ]
 
 getAddrChains :: Domain   -- MX hostname
@@ -99,11 +122,11 @@ getAddrChains mx base names tlsards addrs = do
         case a of
             (RD_A ipaddr)
                 | not allow && any (isMatchedTo ipaddr) reserved4
-                -> return $ AddrChain a $ SmtpError CONNECT (-1) ""
+                -> scannerFail $ AddrChain a $ SmtpError CONNECT (-1) ""
                 | otherwise -> doAddr base names tlsards a
             (RD_AAAA ipaddr)
                 | not allow && any (isMatchedTo ipaddr) reserved6
-                -> return $ AddrChain a $ SmtpError CONNECT (-1) ""
+                -> scannerFail $ AddrChain a $ SmtpError CONNECT (-1) ""
                 | otherwise -> doAddr base names tlsards a
             _   -> return $ AddrChain a $ ChainException unsupported
     unsupported = toException $ userError "Unsupported address family"
