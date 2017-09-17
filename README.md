@@ -30,12 +30,63 @@ and ECDSA, it is almost always RSA that is properly configured and ECDSA
 that is neglected.  So, for now, testing ECDSA in preference to RSA is
 typically a feature, not a bug.
 
+## Synopsis
+
+The `danecheck` command options are as below.
+
+    $ danecheck --help
+    danecheck - check for and validate SMTP TLSA records
+
+    Usage: danecheck [-n|--nameserver ADDRESS] [-t|--timeout TIMEOUT]
+                     [-r|--tries NUMTRIES] [-H|--helo HELO]
+                     [-s|--smtptimeout TIMEOUT] [-l|--linelimit LENGTH]
+                     [-R|--reserved] [-D|--down HOSTNAME] [-4|--noipv4] [-6|--ipv6]
+                     [-d|--days DAYS] [-e|--eechecks] [DOMAIN]
+
+    Available options:
+      -h,--help                Show this help text
+      -n,--nameserver ADDRESS  Use nameserver at ADDRESS (default: "127.0.0.1")
+      -t,--timeout TIMEOUT     DNS request TIMEOUT (default: 3000 ms)
+      -r,--tries NUMTRIES      at most NUMTRIES requests per lookup (default: 6)
+      -H,--helo HELO           send specified client HELO name
+      -s,--smtptimeout TIMEOUT SMTP TIMEOUT (default: 30000 ms)
+      -l,--linelimit LENGTH    Maximum server SMTP response LENGTH (default: 4096)
+      -R,--reserved            connect to reserved IP addresses
+      -D,--down HOSTNAME       Specify one or more HOSTNAMEs that are down
+      -4,--noipv4              disable SMTP via IPv4
+      -6,--ipv6                enable SMTP via IPv6
+      -d,--days DAYS           check validity at DAYS in the future
+      -e,--eechecks            check end-entity (leaf) certificate dates and names
+      DOMAIN                   check the specified DOMAIN (default: ".")
+
+    When scanning the root domain, what's checked is secure retrieval of the
+    root DNSKEY and SOA RRSets. Similarly, when scanning a top-level domain,
+    what's checked is secure retrieval of its DS, DNSKEY and SOA records.
+    For all other domains, MX records, address records and TLSA records are
+    retrieved and must be DNSSEC signed. Each MX host is expected to have
+    TLSA records, an SMTP connection is made to each address of each such MX
+    host. A TLS handshake is performed to retrieve the hosts's certificate
+    chain which is verified against the DNS TLSA records. If anything is
+    unavailable, insecure or wrong, a non-zero exit code is returned.
+
+Reserved addresses include the address blocks from the IANA IPv4 and
+IPv6 special purpose address registries:
+
+* [IPv4 Special-Purpose Address Registry](https://www.iana.org/assignments/iana-ipv4-special-registry)
+* [IPv6 Special-Purpose Address Registry](https://www.iana.org/assignments/iana-ipv6-special-registry)
+
+these include, for example, the RFC1918 private IPv4 ranges, and
+should not appear among the addresses of MX hosts of internet-facing
+email domains.  If you're testing a non-public domain on an internal
+network, you can use the `-R` option to enable connections to
+reserved addresses.
+
 ## Building the software
 
 ### Prerequisite:  A working GHC + Stack toolchain.
 
-Haskell and stack can be downloaded from https://www.haskell.org/platform/
-and are available as packages for various operating systems.
+Haskell and stack can be downloaded from the [Haskell platform](https://www.haskell.org/platform/)
+website, and are also available as packages for various operating systems.
 
 - Older versions of `stack` can be used to install a more current
   version, which typically installs into `~/.local/bin`.
@@ -54,22 +105,21 @@ absent on some systems.  There are likely more on some systems.
 
 ### Clone the danecheck Git repository and submodules
 
-The "danecheck" repository uses submodules for some of its dependencies.
-After cloning "danecheck", also retrieve the submodules:
+The `danecheck` repository uses submodules for some of its dependencies,
+the `--recursive` option to `git clone` will automatically clone the
+submodules.
 
-    $ git clone https://github.com/vdukhovni/danecheck
+    $ git clone --recursive https://github.com/vdukhovni/danecheck
     $ cd danecheck
-    $ git submodule init
-    $ git submodule update
 
 ### Compile and install danecheck
 
-Using a sufficiently recent version of "stack", in the top-level directory
+Using a sufficiently recent version of `stack`, in the top-level directory
 of the cloned project run
 
     $ stack install
 
-which will compile and install a copy of the "danecheck" executable in
+which will compile and install a copy of the `danecheck` executable in
 Stack's default installation directory (typically ~/.local/bin).
 
 ## Choose a working DNSSEC-validating resolver
@@ -78,8 +128,8 @@ It is assumed by default that your system has a working DNSSEC-validating
 resolver (BIND 9, unbound or similar) running locally and listening on
 the loopback interface at UDP and TCP at 127.0.0.1:53.
 
-The system's "/etc/resolv.conf" file is not used.  If you want to
-specify a different validating resolver, use the "-n" option to
+The system's `/etc/resolv.conf` file is not used.  If you want to
+specify a different validating resolver, use the `-n` option to
 specify an alternative IP address.  The port number cannot be
 changed at present.
 
@@ -105,9 +155,9 @@ data abbreviated):
 The ` ; NoError AD=1` DNS comments appended to each output line indicates
 that the resolver obtained a DNSSEC validated result.  The `.` between the
 first and second DNS labels of the SOA contact mailbox field is displayed
-as an "@" sign, since some domains have literal `.` characters in the
+as an `@` sign, since some domains have literal `.` characters in the
 localpart (first label) of the address.  However, at present, the trailing
-"." is not presently stripped from the domain part of the address.
+`.` is not presently stripped from the domain part of the address.
 
 ### Check your TLD
 
