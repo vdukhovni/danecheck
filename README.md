@@ -7,9 +7,9 @@
 
 - Test whether DNSSEC is enabled for a given TLD.
 
-- Check whether an email is fully protected (across all of its MX
-  hosts) by DANE TLSA records, and whether these match the actual
-  certificate chains seen at each IP address of each MX host.
+- Check whether an email domain is fully protected (across all of
+  its MX hosts) by DANE TLSA records, and whether these match the
+  actual certificate chains seen at each IP address of each MX host.
 
 - Perform certificate chain verification at a time offset from the
   current time to ensure that that certificates are not about to
