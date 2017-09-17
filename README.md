@@ -51,7 +51,7 @@ After cloning "danecheck", also retrieve the submodules:
     $ git clone https://github.com/vdukhovni/danecheck
     $ cd danecheck
     $ git submodule init
-    $ git submodule sync
+    $ git submodule update
 
 ### Compile and install danecheck
 
