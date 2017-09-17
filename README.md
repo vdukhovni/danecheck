@@ -22,13 +22,13 @@ status is also returned if any of the SMTP connections fail to establish
 a TLS connection or yield a certificat chain that does not match the
 TLSA records.
 
-Note that "danecheck" prefers ECDSA to RSA, and only makes one
+Note that `danecheck` prefers ECDSA to RSA, and only makes one
 connection to each IP address, so for hosts that have both ECDSA and RSA
 certificates, only the ECDSA certificate will be checked.  Such hosts
 are rare, and when their TLSA records are only correct for one of RSA
-and ECDSA, it is almost RSA that is properly configured and ECDSA that
-is neglected.  So, for now, it makes to test ECDSA when available,
-and otherwise RSA.
+and ECDSA, it is almost always RSA that is properly configured and ECDSA
+that is neglected.  So, for now, testing ECDSA in preference to RSA is
+typically a feature, not a bug.
 
 ## Building the software
 
@@ -37,11 +37,20 @@ and otherwise RSA.
 Haskell and stack can be downloaded from https://www.haskell.org/platform/
 and are available as packages for various operating systems.
 
-- Older versions of "stack" can be used to install a more current
-  version, which typically installs into ~/.local/bin
+- Older versions of `stack` can be used to install a more current
+  version, which typically installs into `~/.local/bin`.
 
       $ stack upgrade
       $ stack update
+
+### Developement libraries and headers
+
+Some of the Haskell packages required for `danecheck` depend on
+optional C-libraries that may require the installation of additional
+OS packages.  Below is a partial list of known optional dependencies
+absent on some systems.  There are likely more on some systems.
+
+* libicu for Unicode to ASCII conversion of domain names
 
 ### Clone the danecheck Git repository and submodules
 
