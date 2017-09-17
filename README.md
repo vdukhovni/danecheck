@@ -169,8 +169,8 @@ status of a TLD `danecheck` outputs its DS, DNSKEY and SOA RRsets.
 For example:
 
     $ danecheck org
-    org. IN DS 9795 7 1 364dfab3daf254cab477b5675b10766ddaa24982 ; NoError AD=1
-    org. IN DS 9795 7 2 3922b31b6f3a4ea92b19eb7b52120f031fd8e05ff0b03bafcf9f891bfe7ff8e5 ; NoError AD=1
+    org. IN DS 9795 7 1 364dfab3daf2...766ddaa24982 ; NoError AD=1
+    org. IN DS 9795 7 2 3922b31b6f3a...891bfe7ff8e5 ; NoError AD=1
     org. IN DNSKEY 256 3 7 AwEAAXxsMmN/...Vb99Wac24Fk7 ; NoError AD=1
     org. IN DNSKEY 256 3 7 AwEAAayiVbuM...xTc1wZtAKVjr ; NoError AD=1
     org. IN DNSKEY 257 3 7 AwEAAZTjbIO5...8ti6MNoJEHU= ; NoError AD=1
@@ -291,7 +291,7 @@ required for the overall check to succeed.  In the example below, the host
           pkey sha256 [nomatch] <- 2 1 1 eac0fdbe097f...81ab000c2955
     bh.nic.cz. IN A 217.31.204.252 ; NoError AD=1
     bh.nic.cz. IN AAAA ? ; NODATA AD=1
-    _25._tcp.bh.nic.cz. IN TLSA 3 1 1 4f9736249ab586f37fc110856f6a3358adadbf99db03628866466194f5bb2e09 ; NoError AD=1
+    _25._tcp.bh.nic.cz. IN TLSA 3 1 1 4f9736249ab5...6194f5bb2e09 ; NoError AD=1
     0
 
 ## Examples
