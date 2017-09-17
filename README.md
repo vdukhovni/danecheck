@@ -102,20 +102,20 @@ data abbreviated):
     . IN DNSKEY 257 3 8 AwEAAaz/tAm8...R1AkUTV74bU= ; NoError AD=1
     . IN SOA a.root-servers.net. nstld@verisign-grs.com. 2017091601 1800 900 604800 86400 ; NoError AD=1
 
-The " ; NoError AD=1" DNS comments appended to each output line indicates
-that the resolver obtained a DNSSEC validated result.  The "." between the
+The ` ; NoError AD=1` DNS comments appended to each output line indicates
+that the resolver obtained a DNSSEC validated result.  The `.` between the
 first and second DNS labels of the SOA contact mailbox field is displayed
-as an "@" sign, since some domains have literal "." characters in the
+as an "@" sign, since some domains have literal `.` characters in the
 localpart (first label) of the address.  However, at present, the trailing
 "." is not presently stripped from the domain part of the address.
 
 ### Check your TLD
 
 If your domain's ancestor TLD is not DNSSEC signed (still the case for
-some ccTLD domains), then DNSSEC will not used for your domain either,
+some ccTLD domains), then DNSSEC will not be used for your domain either,
 except from resolvers that have configured a custom trust-anchor for
 your domain or one if its ancestor domains.  When checking the DNSSEC
-status of a TLD "danecheck" outputs its DS, DNSKEY and SOA RRsets.
+status of a TLD `danecheck` outputs its DS, DNSKEY and SOA RRsets.
 For example:
 
     $ danecheck org
@@ -165,7 +165,7 @@ your TLD, you can proceed to regularly test your own domain.  Example:
 If the exit code indicates failure you should check the output for:
 
 * DNS Failures
-  - Any failed DNS queries (not NoError or NODATA) or insecure answers (AD=0)
+  - Any failed DNS queries (not `NoError` or `NODATA`) or insecure answers (`AD=0`)
   - Non-existent MX hosts or TLSA records
 * SMTP failures
   - Failures to connect to an MX host at one or more of its IP addresses
@@ -174,17 +174,17 @@ If the exit code indicates failure you should check the output for:
   - Failure to complete the TLS handshake
 * Chain verification failures
   - Failure to find matching TLSA records
-  - Name check failure with DANE-EE(2) TLSA records
-  - Certificate expiration with DANE-EE(2) TLSA records
+  - Name check failure with DANE-TA(2) TLSA records
+  - Certificate expiration with DANE-TA(2) TLSA records
 
 ## Skipping out-of-service MX hosts
 
 If some of your MX hosts are down, and you want to verify the certificate
-chains of only the remaining hosts, you can specify the "--down" option
+chains of only the remaining hosts, you can specify the `--down` option
 one or more times to skip SMTP tests for those hosts, their DNS security
 (including presence of TLSA records) will still be tested and will be
 required for the overall check to succeed.  In the example below, the host
-"bh.nic.cz" is down and is skipped, allowing the overall check to succeed.
+`bh.nic.cz` is down and is skipped, allowing the overall check to succeed.
 
     $ danecheck --down bh.nic.cz cznic.cz; echo $?
     cznic.cz. IN DS 61281 13 2 fac1a7f06c7c...c6d07e7d8ef7 ; NoError AD=1
