@@ -161,21 +161,14 @@ doAddr base refnames tlsards peerAddr = do
             -> do
               (peerNames, peerCerts, peerTime) <- liftIO $ takeMVar (mvCerts st)
               (peerTlsVersion, peerTlsCipher) <- liftIO $ tlsInfo ctx
-              off <- gets $ Opts.addDays . scannerOpts
-              let matchName = namecheck refnames peerNames
+              let Opts.Opts { Opts.addDays = off
+                            , Opts.eeChecks = eechecks
+                            } = opts
+                  matchName = namecheck refnames peerNames
                   vtime = peerTime + (fromIntegral off) * 86400
-
-              -- When the user wants to check names and for the EE cert, we
-              -- start the chain at depth 1 instead, and then decrement the
-              -- reported match depth if any.
-              eechecks <- gets $ Opts.eeChecks . scannerOpts
-              let depth = if_ eechecks 1 0
-                  (d, s) = tlsamatch depth matchName vtime tlsards peerCerts
-                  matchDepth = (if_ eechecks pred id) <$> d
-                  matchStatus = s
-
+                  (d, s) = tlsamatch eechecks matchName vtime tlsards peerCerts
               when (s /= Pass) $ scannerFail ()
-              return PeerChain{..}
+              return PeerChain{matchDepth = d, matchStatus = s, ..}
             | otherwise
             -> scannerFail $ SmtpError STARTTLS 0 ""
         return AddrChain{..}
@@ -215,20 +208,32 @@ doAddr base refnames tlsards peerAddr = do
             (RD_TLSA u 1 0 (_spki)) `elem` rds ||
             (RD_TLSA u 0 0 (_cert)) `elem` rds
 
-    tlsamatch :: Int
+    tlsamatch :: Bool
               -> Maybe String
               -> Int64
               -> [RData]
               -> [CertInfo]
               -> (Maybe Int, MatchStatus)
     tlsamatch _ _ _ _ [] = (Nothing, Nomatch)
-    tlsamatch depth nm tm rds (c@CertInfo{..}:cs) =
-        let match = cinfomatch depth rds c
-        in case depth of
-          0 | match -> (Just depth, Pass)
-            | not $ (fst _life < tm && snd _life > tm) -> (Nothing, Notime)
-            | otherwise -> tlsamatch (depth+1) nm tm rds cs
-          _ | Nothing <- nm -> (Nothing, Noname)
-            | not $ (fst _life < tm && snd _life > tm) -> (Nothing, Notime)
-            | match -> (Just depth, Pass)
-            | otherwise -> tlsamatch (depth+1) nm tm rds cs
+    tlsamatch eechecks nm tm rds certinfos = go False 0 certinfos
+      where
+        -- | If we never find a matching TLSA record, report that!
+        -- Namecheck failure or expiration are only reported if we
+        -- at least find a TLSA match.
+        go _ _ [] = (Nothing, Nomatch)
+        go expired depth (c@CertInfo{..}:cs) =
+            let matched = cinfomatch depth rds c
+                e = expired || fst _life > tm || snd _life < tm
+            in case depth == 0 && not eechecks of
+                 True  | matched -> (Just 0, Pass)
+                       | null [u | RD_TLSA u _ _ _ <- rds, u /= 3]
+                       -> (Nothing, Nomatch)
+                       | otherwise
+                       -> go e (depth+1) cs
+                 False | matched
+                       -> case () of
+                            _ | Nothing <- nm -> (Nothing, Noname)
+                              | e             -> (Nothing, Notime)
+                              | otherwise     -> (Just depth, Pass)
+                       | otherwise
+                       -> go e (depth+1) cs
