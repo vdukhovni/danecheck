@@ -49,7 +49,6 @@ tlsParams host mv_certs store =
       { TLS.clientUseServerNameIndication = True
       , TLS.clientHooks = def
           { TLS.onCertificateRequest = \ _ -> return Nothing
-          , TLS.onNPNServerSuggest   = Nothing
           , TLS.onServerCertificate  = genChainInfo mv_certs
           , TLS.onSuggestALPN        = return Nothing
           }
