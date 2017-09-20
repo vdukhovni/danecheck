@@ -42,6 +42,7 @@ skipHost (DnsRC NameErr) = True
 skipHost (DnsRC NoErr)   = False
 skipHost (DnsRC _)       = False
 skipHost DnsTimeout      = False
+skipHost (DnsXprtErr _)  = False
 skipHost TldMX           = False
 skipHost (ErrRC _)       = False
 

@@ -147,12 +147,12 @@ RRSets and not print the ERROR message.  For example (key base64
 data abbreviated):
 
     $ danecheck
-    . IN DNSKEY 256 3 8 AwEAAYvxrQOO...L1KLSdmoIYM= ; NoError AD=1
-    . IN DNSKEY 257 3 8 AwEAAagAIKlV...QxA+Uk1ihz0= ; NoError AD=1
-    . IN DNSKEY 257 3 8 AwEAAaz/tAm8...R1AkUTV74bU= ; NoError AD=1
-    . IN SOA a.root-servers.net. nstld@verisign-grs.com. 2017091601 1800 900 604800 86400 ; NoError AD=1
+    . IN DNSKEY 256 3 8 AwEAAYvxrQOO...L1KLSdmoIYM= ; AD=1 NoError
+    . IN DNSKEY 257 3 8 AwEAAagAIKlV...QxA+Uk1ihz0= ; AD=1 NoError
+    . IN DNSKEY 257 3 8 AwEAAaz/tAm8...R1AkUTV74bU= ; AD=1 NoError
+    . IN SOA a.root-servers.net. nstld@verisign-grs.com. 2017091601 1800 900 604800 86400 ; AD=1 NoError
 
-The ` ; NoError AD=1` DNS comments appended to each output line indicates
+The ` ; AD=1 NoError` DNS comments appended to each output line indicates
 that the resolver obtained a DNSSEC validated result.  The `.` between the
 first and second DNS labels of the SOA contact mailbox field is displayed
 as an `@` sign, since some domains have literal `.` characters in the
@@ -169,13 +169,13 @@ status of a TLD `danecheck` outputs its DS, DNSKEY and SOA RRsets.
 For example:
 
     $ danecheck org
-    org. IN DS 9795 7 1 364dfab3daf2...766ddaa24982 ; NoError AD=1
-    org. IN DS 9795 7 2 3922b31b6f3a...891bfe7ff8e5 ; NoError AD=1
-    org. IN DNSKEY 256 3 7 AwEAAXxsMmN/...Vb99Wac24Fk7 ; NoError AD=1
-    org. IN DNSKEY 256 3 7 AwEAAayiVbuM...xTc1wZtAKVjr ; NoError AD=1
-    org. IN DNSKEY 257 3 7 AwEAAZTjbIO5...8ti6MNoJEHU= ; NoError AD=1
-    org. IN DNSKEY 257 3 7 AwEAAcMnWBKL...wXCNDXk0kk0= ; NoError AD=1
-    org. IN SOA a0.org.afilias-nst.info. noc@afilias-nst.info. 2012659235 1800 900 604800 86400 ; NoError AD=1
+    org. IN DS 9795 7 1 364dfab3daf2...766ddaa24982 ; AD=1 NoError
+    org. IN DS 9795 7 2 3922b31b6f3a...891bfe7ff8e5 ; AD=1 NoError
+    org. IN DNSKEY 256 3 7 AwEAAXxsMmN/...Vb99Wac24Fk7 ; AD=1 NoError
+    org. IN DNSKEY 256 3 7 AwEAAayiVbuM...xTc1wZtAKVjr ; AD=1 NoError
+    org. IN DNSKEY 257 3 7 AwEAAZTjbIO5...8ti6MNoJEHU= ; AD=1 NoError
+    org. IN DNSKEY 257 3 7 AwEAAcMnWBKL...wXCNDXk0kk0= ; AD=1 NoError
+    org. IN SOA a0.org.afilias-nst.info. noc@afilias-nst.info. 2012659235 1800 900 604800 86400 ; AD=1 NoError
 
 ## Checking your own domain
 
@@ -184,14 +184,14 @@ your TLD, you can proceed to regularly test your own domain.  Example:
 
     $ domain=openssl.org
     $ danecheck "$domain" || printf "ERROR: DANE security check failed for: %s\n" "$domain"
-    openssl.org. IN DS 44671 8 2 30abf6c1b7de...ae7c474f83f9 ; NoError AD=1
-    openssl.org. IN DNSKEY 256 3 8 AwEAAaJsnu//...0lJQkbhta8V7 ; NoError AD=1
-    openssl.org. IN DNSKEY 257 3 8 AwEAAbxptd2o...BUsIsxlbmYs= ; NoError AD=1
-    openssl.org. IN MX 50 mta.openssl.org. ; NoError AD=1
-    mta.openssl.org. IN A 194.97.150.230 ; NoError AD=1
-    mta.openssl.org. IN AAAA 2001:608:c00:180::1:e6 ; NoError AD=1
-    _25._tcp.mta.openssl.org. IN CNAME wildcard._dane.openssl.org. ; NoError AD=1
-    wildcard._dane.openssl.org. IN TLSA 3 1 1 687c07fbe249...b911c93ecaca ; NoError AD=1
+    openssl.org. IN DS 44671 8 2 30abf6c1b7de...ae7c474f83f9 ; AD=1 NoError
+    openssl.org. IN DNSKEY 256 3 8 AwEAAaJsnu//...0lJQkbhta8V7 ; AD=1 NoError
+    openssl.org. IN DNSKEY 257 3 8 AwEAAbxptd2o...BUsIsxlbmYs= ; AD=1 NoError
+    openssl.org. IN MX 50 mta.openssl.org. ; AD=1 NoError
+    mta.openssl.org. IN A 194.97.150.230 ; AD=1 NoError
+    mta.openssl.org. IN AAAA 2001:608:c00:180::1:e6 ; AD=1 NoError
+    _25._tcp.mta.openssl.org. IN CNAME wildcard._dane.openssl.org. ; AD=1 NoError
+    wildcard._dane.openssl.org. IN TLSA 3 1 1 687c07fbe249...b911c93ecaca ; AD=1 NoError
       mta.openssl.org[194.97.150.230]: pass: TLSA match: depth = 0, name = openssl.org
         TLS = TLS12 with ECDHE-RSA-AES256GCM-SHA384
         name = *.openssl.org
@@ -237,15 +237,15 @@ required for the overall check to succeed.  In the example below, the host
 `bh.nic.cz` is down and is skipped, allowing the overall check to succeed.
 
     $ danecheck --down bh.nic.cz cznic.cz; echo $?
-    cznic.cz. IN DS 61281 13 2 fac1a7f06c7c...c6d07e7d8ef7 ; NoError AD=1
-    cznic.cz. IN DNSKEY 256 3 13 rs6oetkFuqOg...swO3BfKoLw== ; NoError AD=1
-    cznic.cz. IN DNSKEY 257 3 13 LM4zvjUgZi2X...TrDzWmmHwQ== ; NoError AD=1
-    cznic.cz. IN MX 10 mail.nic.cz. ; NoError AD=1
-    cznic.cz. IN MX 15 mx.nic.cz. ; NoError AD=1
-    cznic.cz. IN MX 20 bh.nic.cz. ; NoError AD=1
-    mail.nic.cz. IN A 217.31.204.67 ; NoError AD=1
-    mail.nic.cz. IN AAAA 2001:1488:800:400::400 ; NoError AD=1
-    _25._tcp.mail.nic.cz. IN TLSA 3 1 1 4f9736249ab5...6194f5bb2e09 ; NoError AD=1
+    cznic.cz. IN DS 61281 13 2 fac1a7f06c7c...c6d07e7d8ef7 ; AD=1 NoError
+    cznic.cz. IN DNSKEY 256 3 13 rs6oetkFuqOg...swO3BfKoLw== ; AD=1 NoError
+    cznic.cz. IN DNSKEY 257 3 13 LM4zvjUgZi2X...TrDzWmmHwQ== ; AD=1 NoError
+    cznic.cz. IN MX 10 mail.nic.cz. ; AD=1 NoError
+    cznic.cz. IN MX 15 mx.nic.cz. ; AD=1 NoError
+    cznic.cz. IN MX 20 bh.nic.cz. ; AD=1 NoError
+    mail.nic.cz. IN A 217.31.204.67 ; AD=1 NoError
+    mail.nic.cz. IN AAAA 2001:1488:800:400::400 ; AD=1 NoError
+    _25._tcp.mail.nic.cz. IN TLSA 3 1 1 4f9736249ab5...6194f5bb2e09 ; AD=1 NoError
       mail.nic.cz[217.31.204.67]: pass: TLSA match: depth = 0, name = mail.nic.cz
         TLS = TLS12 with ECDHE-RSA-AES256GCM-SHA384
         name = jabber.nic.cz
@@ -267,9 +267,9 @@ required for the overall check to succeed.  In the example below, the host
           Subject CommonName = Let's Encrypt Authority X3
           Subject Organization = Let's Encrypt
           pkey sha256 [nomatch] <- 2 1 1 60b87575447d...0517616e8a18
-    mx.nic.cz. IN A 217.31.58.56 ; NoError AD=1
-    mx.nic.cz. IN AAAA 2001:1ab0:7e1e:c574:7a2b:cbff:fe33:7019 ; NoError AD=1
-    _25._tcp.mx.nic.cz. IN TLSA 3 1 1 a9205f093637...b519bf47a523 ; NoError AD=1
+    mx.nic.cz. IN A 217.31.58.56 ; AD=1 NoError
+    mx.nic.cz. IN AAAA 2001:1ab0:7e1e:c574:7a2b:cbff:fe33:7019 ; AD=1 NoError
+    _25._tcp.mx.nic.cz. IN TLSA 3 1 1 a9205f093637...b519bf47a523 ; AD=1 NoError
       mx.nic.cz[217.31.58.56]: pass: TLSA match: depth = 0, name = mx.nic.cz
         TLS = TLS12 with ECDHE-RSA-AES256GCM-SHA384
         name = mx.nic.cz
@@ -289,9 +289,9 @@ required for the overall check to succeed.  In the example below, the host
           Subject CommonName = CZ.NIC SHA2 Root Certification Authority
           Subject Organization = CZ.NIC, z.s.p.o.
           pkey sha256 [nomatch] <- 2 1 1 eac0fdbe097f...81ab000c2955
-    bh.nic.cz. IN A 217.31.204.252 ; NoError AD=1
-    bh.nic.cz. IN AAAA ? ; NODATA AD=1
-    _25._tcp.bh.nic.cz. IN TLSA 3 1 1 4f9736249ab5...6194f5bb2e09 ; NoError AD=1
+    bh.nic.cz. IN A 217.31.204.252 ; AD=1 NoError
+    bh.nic.cz. IN AAAA ? ; AD=1 NODATA
+    _25._tcp.bh.nic.cz. IN TLSA 3 1 1 4f9736249ab5...6194f5bb2e09 ; AD=1 NoError
     0
 
 ## Examples
@@ -302,10 +302,10 @@ Here STARTTLS is not offered (to at least some SMTP clients), even though
 TLSA records are published:
 
     $ danecheck rnrfunco.net
-    rnrfunco.net. IN MX 10 tusk.sgt.com. ; NoError AD=1
-    tusk.sgt.com. IN A 204.107.130.104 ; NoError AD=1
-    tusk.sgt.com. IN AAAA ? ; NODATA AD=1
-    _25._tcp.tusk.sgt.com. IN TLSA 3 0 1 bd60df4cc8c2...50ac0045659f ; NoError AD=1
+    rnrfunco.net. IN MX 10 tusk.sgt.com. ; AD=1 NoError
+    tusk.sgt.com. IN A 204.107.130.104 ; AD=1 NoError
+    tusk.sgt.com. IN AAAA ? ; AD=1 NODATA
+    _25._tcp.tusk.sgt.com. IN TLSA 3 0 1 bd60df4cc8c2...50ac0045659f ; AD=1 NoError
       tusk.sgt.com[204.107.130.104]: STARTTLS not offered
 
 ### No matching TLSA records
@@ -313,10 +313,10 @@ TLSA records are published:
 Here none of the TLSA record match the certificate chain:
 
     $ danecheck dipietro.id.au
-    dipietro.id.au. IN MX 10 mail.dipietro.id.au. ; NoError AD=1
-    mail.dipietro.id.au. IN A 14.203.171.177 ; NoError AD=1
-    mail.dipietro.id.au. IN AAAA ? ; NODATA AD=1
-    _25._tcp.mail.dipietro.id.au. IN TLSA 3 1 1 7bf7ea3b070b...34e1e0044e6d ; NoError AD=1
+    dipietro.id.au. IN MX 10 mail.dipietro.id.au. ; AD=1 NoError
+    mail.dipietro.id.au. IN A 14.203.171.177 ; AD=1 NoError
+    mail.dipietro.id.au. IN AAAA ? ; AD=1 NODATA
+    _25._tcp.mail.dipietro.id.au. IN TLSA 3 1 1 7bf7ea3b070b...34e1e0044e6d ; AD=1 NoError
       mail.dipietro.id.au[14.203.171.177]: fail: TLSA mismatch
         TLS = TLS12 with ECDHE-RSA-AES256GCM-SHA384
         name = cloud.dipietro.id.au
@@ -345,10 +345,10 @@ Here none of the TLSA record match the certificate chain:
 Here TLSA record lookups ServFails due to a buggy nameserver.
 
     $ danecheck truman.edu
-    truman.edu. IN DS 52166 5 1 fc1b03d050bf...a69d7ed8676d ; NoError AD=1
-    truman.edu. IN DNSKEY 256 3 5 AwEAAdKNi1TB...RSK2WheyT8zF ; NoError AD=1
-    truman.edu. IN DNSKEY 257 3 5 AwEAAZianXgr...ZXk7AnTMbHM= ; NoError AD=1
-    truman.edu. IN MX 5 barracuda.truman.edu. ; NoError AD=1
-    barracuda.truman.edu. IN A 150.243.160.93 ; NoError AD=1
-    barracuda.truman.edu. IN AAAA ? ; ServFail AD=0
-    _25._tcp.barracuda.truman.edu. IN TLSA ? ; ServFail AD=0
+    truman.edu. IN DS 52166 5 1 fc1b03d050bf...a69d7ed8676d ; AD=1 NoError
+    truman.edu. IN DNSKEY 256 3 5 AwEAAdKNi1TB...RSK2WheyT8zF ; AD=1 NoError
+    truman.edu. IN DNSKEY 257 3 5 AwEAAZianXgr...ZXk7AnTMbHM= ; AD=1 NoError
+    truman.edu. IN MX 5 barracuda.truman.edu. ; AD=1 NoError
+    barracuda.truman.edu. IN A 150.243.160.93 ; AD=1 NoError
+    barracuda.truman.edu. IN AAAA ? ; AD=0 ServFail
+    _25._tcp.barracuda.truman.edu. IN TLSA ? ; AD=0 ServFail

@@ -16,11 +16,13 @@ module Dane.Scanner.DNS.Response
     , respValidated
     ) where
 
+import           Control.Exception (IOException)
 import qualified Data.ByteString.Char8 as BC
 import           Data.UnixTime (formatUnixTimeGMT, UnixTime(..))
 import           Foreign.C.Types (CTime(..))
 import           Network.DNS (Domain, RCODE(..), TYPE(AAAA, CNAME))
 import           Network.DNS (RData(RD_A, RD_AAAA, RD_TLSA))
+import           GHC.IO.Exception (ioe_description, ioe_filename, ioe_location)
 
 import           Dane.Scanner.Util
 import           Dane.Scanner.SMTP.Certs
@@ -54,6 +56,7 @@ instance Show Validity where
 --
 data RC = DnsRC RCODE
         | DnsTimeout
+        | DnsXprtErr IOException
         | TldMX
         | ErrRC String
         deriving (Eq)
@@ -72,6 +75,9 @@ instance Show RC where
     show (DnsRC Refused)   = "Refused"
     show (DnsRC rc)        = show rc
     show DnsTimeout        = "timeout"
+    show (DnsXprtErr e)    = maybe "" (++ ": ") (ioe_filename e) ++
+                             ioe_location e ++ ": " ++
+                             ioe_description e
     show TldMX             = "TldMXHost"
     show (ErrRC err)       = err
 
@@ -198,8 +204,8 @@ instance Show Response where
                 , show typ
                 , rdstr
                 , ";"
-                , rcstr
                 , if (ad) then "AD=1" else "AD=0"
+                , rcstr
                 ]
 
       showTLSA AAAA (Just (t@RespTLSA{..})) =

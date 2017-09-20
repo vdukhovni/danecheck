@@ -100,6 +100,7 @@ dnsLookup qname typ = do
     reply <- liftIO $ withResolver seed $ \rv -> lookupRawAD rv qname typ
     case reply of
       Left DNS.TimeoutExpired -> return (DnsTimeout, False, [])
+      Left (DNS.NetworkFailure e)  -> return (DnsXprtErr e, False, [])
       Left e -> return $ (ErrRC $ show e, False, [])
       Right msg -> do
         let fl = DNS.flags $ DNS.header msg
