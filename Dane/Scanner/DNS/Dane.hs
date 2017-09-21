@@ -250,12 +250,13 @@ check domain = do
 --
 dnsSeed :: Opts.Opts -> IO DNS.ResolvSeed
 dnsSeed opts =
-  DNS.makeResolvSeed $
-    DNS.defaultResolvConf
-      { DNS.resolvInfo = DNS.RCHostName $ Opts.dnsServer opts
-      , DNS.resolvTimeout = 1000 * Opts.dnsTimeout opts
-      , DNS.resolvRetry = Opts.dnsTries opts
-      }
+    let seed = DNS.defaultResolvConf
+            { DNS.resolvRetry = Opts.dnsTries opts
+            , DNS.resolvTimeout = 1000 * Opts.dnsTimeout opts
+            }
+     in DNS.makeResolvSeed $ case Opts.dnsServer opts of
+            Nothing -> seed
+            Just ns -> seed { DNS.resolvInfo = DNS.RCHostName ns }
 
 
 -- | Scan requested domain after seeding the DNS resolver

@@ -37,7 +37,7 @@ The `danecheck` command options are as below.
     $ danecheck --help
     danecheck - check for and validate SMTP TLSA records
 
-    Usage: danecheck [-n|--nameserver ADDRESS] [-t|--timeout TIMEOUT]
+    Usage: danecheck ([-N] | [-n|--nameserver ADDRESS]) [-t|--timeout TIMEOUT]
                      [-r|--tries NUMTRIES] [-H|--helo HELO]
                      [-s|--smtptimeout TIMEOUT] [-l|--linelimit LENGTH]
                      [-R|--reserved] [-D|--down HOSTNAME] [-4|--noipv4] [-6|--ipv6]
@@ -45,6 +45,7 @@ The `danecheck` command options are as below.
 
     Available options:
       -h,--help                Show this help text
+      -N                       Use /etc/resolv.conf nameserver list
       -n,--nameserver ADDRESS  Use nameserver at ADDRESS (default: "127.0.0.1")
       -t,--timeout TIMEOUT     DNS request TIMEOUT (default: 3000 ms)
       -r,--tries NUMTRIES      at most NUMTRIES requests per lookup (default: 6)
@@ -130,10 +131,11 @@ It is assumed by default that your system has a working DNSSEC-validating
 resolver (BIND 9, unbound or similar) running locally and listening on
 the loopback interface at UDP and TCP at 127.0.0.1:53.
 
-The system's `/etc/resolv.conf` file is not used.  If you want to
-specify a different validating resolver, use the `-n` option to
-specify an alternative IP address.  The port number cannot be
-changed at present.
+By default the system's `/etc/resolv.conf` file is ignored and the
+default nameserver list consists of just "127.0.0.1".  If you want
+to specify a different validating resolver, use the `-n` option to
+select an alternate IP address.  The /etc/resol.conf nameserver list
+can be selected via the "-N" option.
 
 ### Check that the software and resolver are working
 

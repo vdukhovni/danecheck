@@ -5,7 +5,7 @@ import           Data.Char (toLower)
 import           Data.Monoid ((<>))
 
 data Opts = Opts
-  { dnsServer   :: String
+  { dnsServer   :: Maybe String
   , dnsTimeout  :: Int
   , dnsTries    :: Int
   , smtpHelo    :: Maybe String
@@ -20,16 +20,24 @@ data Opts = Opts
   , dnsDomain   :: String
   }
 
+parseN :: Parser (Maybe String)
+parseN = flag' Nothing
+    ( short 'N'
+   <> help "Use /etc/resolv.conf nameserver list" )
+
+parsen :: Parser (Maybe String)
+parsen = Just <$> strOption
+    ( long "nameserver"
+   <> short 'n'
+   <> value "127.0.0.1"
+   <> showDefault
+   <> metavar "ADDRESS"
+   <> help "Use nameserver at ADDRESS" )
+
 parser :: Parser Opts
 parser = Opts
 
-  <$> strOption
-      ( long "nameserver"
-     <> short 'n'
-     <> value "127.0.0.1"
-     <> showDefault
-     <> metavar "ADDRESS"
-     <> help "Use nameserver at ADDRESS" )
+  <$> ( parseN <|> parsen )
 
   <*> option auto
       ( long "timeout"
