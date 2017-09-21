@@ -20,9 +20,9 @@ import           Control.Exception (IOException)
 import qualified Data.ByteString.Char8 as BC
 import           Data.UnixTime (formatUnixTimeGMT, UnixTime(..))
 import           Foreign.C.Types (CTime(..))
+import           GHC.IO.Exception (ioe_description, ioe_filename, ioe_location)
 import           Network.DNS (Domain, RCODE(..), TYPE(AAAA, CNAME))
 import           Network.DNS (RData(RD_A, RD_AAAA, RD_TLSA))
-import           GHC.IO.Exception (ioe_description, ioe_filename, ioe_location)
 
 import           Dane.Scanner.Util
 import           Dane.Scanner.SMTP.Certs
@@ -75,11 +75,21 @@ instance Show RC where
     show (DnsRC Refused)   = "Refused"
     show (DnsRC rc)        = show rc
     show DnsTimeout        = "timeout"
-    show (DnsXprtErr e)    = maybe "" (++ ": ") (ioe_filename e) ++
-                             ioe_location e ++ ": " ++
-                             ioe_description e
+    show (DnsXprtErr e)    = showXprtErr e
     show TldMX             = "TldMXHost"
     show (ErrRC err)       = err
+
+-- | The DNS library sets the 'ioe_filename' field of Network I/O errors to
+-- the protocol (@UDP@ or @TCP@) and the 'ioe_location' to the address and
+-- port of the peer nameserver.  The 'ioe_description` is for some reason
+-- only accessible via "GHC.IO.Exception" and not via "System.IO.Error",
+-- but we already depend on many GHC language extensions...
+--
+showXprtErr :: IOException -> String
+showXprtErr = (\a b c -> a ++ b ++ c)
+    <$> maybe "" (++ ": ") . ioe_filename
+    <*> ( ++ "; ") . ioe_location
+    <*> ioe_description
 
 
 -- | DNSSEC Authentication indication from the trusted validating resolver
