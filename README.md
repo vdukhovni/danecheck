@@ -344,7 +344,7 @@ Here none of the TLSA record match the certificate chain:
 
 ### TLSA Lookups ServFail
 
-Here TLSA record lookups ServFails due to a buggy nameserver.
+Here TLSA record lookups ServFail due to a buggy nameserver:
 
     $ danecheck truman.edu
     truman.edu. IN DS 52166 5 1 fc1b03d050bf...a69d7ed8676d ; AD=1 NoError
