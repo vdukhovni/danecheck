@@ -191,7 +191,7 @@ doAddr base refnames tlsards peerAddr = do
             match = find ((== dom) . map toLower) names
         in case match of
            Just  _ -> match
-           Nothing | p <- takeWhile (/= '.') dom
+           Nothing | p <- dropWhile (/= '.') dom
                    , (_:t) <- p
                    , '.' `elem` t
                    , wild <- find (== ('*' : p)) names
