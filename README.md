@@ -36,13 +36,13 @@ The `danecheck` command options are as below.
 
     $ danecheck --help
     danecheck - check for and validate SMTP TLSA records
-
+    
     Usage: danecheck ([-N] | [-n|--nameserver ADDRESS]) [-t|--timeout TIMEOUT]
                      [-r|--tries NUMTRIES] [-H|--helo HELO]
                      [-s|--smtptimeout TIMEOUT] [-l|--linelimit LENGTH]
                      [-R|--reserved] [-D|--down HOSTNAME] [-4|--noipv4] [-6|--ipv6]
-                     [-d|--days DAYS] [-e|--eechecks] [DOMAIN]
-
+                     [-A|--all] [-d|--days DAYS] [-e|--eechecks] [DOMAIN]
+    
     Available options:
       -h,--help                Show this help text
       -N                       Use /etc/resolv.conf nameserver list
@@ -56,19 +56,22 @@ The `danecheck` command options are as below.
       -D,--down HOSTNAME       Specify one or more HOSTNAMEs that are down
       -4,--noipv4              disable SMTP via IPv4
       -6,--ipv6                enable SMTP via IPv6
+      -A,--all                 scan all MX hosts, not just those with TLSA RRs
       -d,--days DAYS           check validity at DAYS in the future
       -e,--eechecks            check end-entity (leaf) certificate dates and names
       DOMAIN                   check the specified DOMAIN (default: ".")
 
-    When scanning the root domain, what's checked is secure retrieval of the
-    root DNSKEY and SOA RRSets. Similarly, when scanning a top-level domain,
-    what's checked is secure retrieval of its DS, DNSKEY and SOA records.
-    For all other domains, MX records, address records and TLSA records are
-    retrieved and must be DNSSEC signed. Each MX host is expected to have
-    TLSA records, an SMTP connection is made to each address of each such MX
-    host. A TLS handshake is performed to retrieve the hosts's certificate
-    chain which is verified against the DNS TLSA records. If anything is
-    unavailable, insecure or wrong, a non-zero exit code is returned.
+When scanning the root domain, what's checked is secure retrieval
+of the root DNSKEY and SOA RRSets. Similarly, when scanning a
+top-level domain, what's checked is secure retrieval of its DS,
+DNSKEY and SOA records. For all other domains, MX records, address
+records and TLSA records are retrieved and must be DNSSEC signed.
+Each MX host is expected to have TLSA records, an SMTP connection
+is made to each address of each such MX host (with the `-A` option
+connections are made to all MX hosts). A TLS handshake is performed
+to retrieve the hosts's certificate chain which is verified against
+the DNS TLSA records. If anything is unavailable, insecure or wrong,
+a non-zero exit code is returned.
 
 Reserved addresses include the address blocks from the IANA IPv4 and
 IPv6 special purpose address registries:
