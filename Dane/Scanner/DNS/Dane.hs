@@ -126,7 +126,7 @@ doMXHost qname owner mx = do
                       display $ a
                       display $ addbase b t chains aaaa
                   | otherwise -> do
-                      displayFail a
+                      displayFail $ a
                       displayFail $ aaaa
   where
     noteInsecure Response{..} = case respRC of
@@ -149,12 +149,14 @@ doMXHost qname owner mx = do
 
     getchains :: Response -> Domain -> [Response] -> Scanner [AddrChain]
     getchains tlsa@(respValidity -> Secure) base rs =
-        let refnames = nub [base, qname, owner]
-        in getAddrChains mx base refnames (respRD tlsa) $ concatMap respRD rs
+        let addrs = concatMap respRD rs
+            refnames = nub [base, qname, owner]
+         in getAddrChains mx base refnames (respRD tlsa) addrs
     getchains _ base rs = gets scannerOpts >>= \opts ->
-        if Opts.useAll opts
-        then getAddrChains mx base [] [] $ concatMap respRD rs
-        else scannerFail []
+        let addrs = concatMap respRD rs
+         in if Opts.useAll opts
+            then scannerFail () >> getAddrChains mx base [] [] addrs
+            else scannerFail []
 
 
 -- | If the MX RRset is secure (AD==True), for each MX host perform A/AAAA

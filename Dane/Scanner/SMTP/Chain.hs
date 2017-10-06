@@ -133,7 +133,7 @@ getAddrChains mx base names tlsards addrs = do
                 | not allow && any (isMatchedTo ipaddr) reserved6
                 -> scannerFail $ AddrChain a $ SmtpError CONNECT (-1) ""
                 | otherwise -> doAddr base names tlsards a
-            _   -> return $ AddrChain a $ ChainException unsupported
+            _   -> scannerFail $ AddrChain a $ ChainException unsupported
     unsupported = toException $ userError "Unsupported address family"
 
 doAddr :: Domain        -- TLSA base domain
@@ -150,8 +150,8 @@ doAddr base refnames tlsards peerAddr = do
   ipConn peerAddr 25 tout $ \conn ->
     case conn of
       Left IOError{..} -> case ioe_type of
-        TimeExpired -> notime
-        _           -> noconn
+        TimeExpired -> scannerFail () >> notime
+        _           -> scannerFail () >> noconn
       Right sock -> do
         st <- liftIO $ dosmtp =<< startState helo basenm tout llen sock
         peerChain <- case (smtpErr st) of
