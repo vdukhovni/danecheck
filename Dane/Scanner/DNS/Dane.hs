@@ -100,9 +100,10 @@ doMXHost qname owner mx = do
     else do
       aaaa <- getResponse mx AAAA
       noteInsecure aaaa
-      doV4 <- gets $ Opts.enableV4 . scannerOpts
-      doV6 <- gets $ Opts.enableV6 . scannerOpts
-      let connaddrs = if_ doV4 [a] [] ++ if_ doV6 [aaaa] []
+      opts <- gets scannerOpts
+      let doV4 = Opts.enableV4 opts
+          doV6 = Opts.enableV6 opts
+          connaddrs = if_ doV4 [a] [] ++ if_ doV6 [aaaa] []
       bt <- getTLSA a
       case bt of
         Just (b, t) -> do
@@ -112,13 +113,21 @@ doMXHost qname owner mx = do
         Nothing     -> do
             bt' <- getTLSA aaaa
             case bt' of
-              Nothing     -> do
-                  displayFail a
-                  displayFail $ aaaa
               Just (b, t) -> do
                 chains <- getchains t b connaddrs
                 display $ a
                 display $ addbase b t chains aaaa
+              Nothing
+                  | Opts.useAll opts -> do
+                      let b = mx
+                          n = tlsaPrefix <> b
+                          t = nodata NoErrorRC False n TLSA
+                      chains <- getchains t b connaddrs
+                      display $ a
+                      display $ addbase b t chains aaaa
+                  | otherwise -> do
+                      displayFail a
+                      displayFail $ aaaa
   where
     noteInsecure Response{..} = case respRC of
         NoErrorRC  | respCnAD -> return ()
@@ -142,7 +151,10 @@ doMXHost qname owner mx = do
     getchains tlsa@(respValidity -> Secure) base rs =
         let refnames = nub [base, qname, owner]
         in getAddrChains mx base refnames (respRD tlsa) $ concatMap respRD rs
-    getchains _ _ _ = scannerFail []
+    getchains _ base rs = gets scannerOpts >>= \opts ->
+        if Opts.useAll opts
+        then getAddrChains mx base [] [] $ concatMap respRD rs
+        else scannerFail []
 
 
 -- | If the MX RRset is secure (AD==True), for each MX host perform A/AAAA

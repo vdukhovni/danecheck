@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Dane.Scanner.SMTP.Chain
     ( getAddrChains
@@ -40,6 +41,8 @@ data AddrChain = AddrChain
     }
 
 data MatchStatus = Pass
+                 | Notlsa
+                 | Nousable
                  | Nomatch
                  | Noname
                  | Notime
@@ -47,6 +50,8 @@ data MatchStatus = Pass
 
 instance Show MatchStatus where
     show Pass = "pass"
+    show Notlsa = "tlsa-absent"
+    show Nousable = "tlsa-unusable"
     show Nomatch = "tlsa-mismatch"
     show Noname = "name-mismatch"
     show Notime = "cert-expired"
@@ -214,7 +219,8 @@ doAddr base refnames tlsards peerAddr = do
               -> [RData]
               -> [CertInfo]
               -> (Maybe Int, MatchStatus)
-    tlsamatch _ _ _ _ [] = (Nothing, Nomatch)
+    tlsamatch _ _ _ [] _ = (Nothing, Notlsa)
+    tlsamatch _ _ _ (usable -> []) _ = (Nothing, Nousable)
     tlsamatch eechecks nm tm rds certinfos = go False 0 certinfos
       where
         -- | If we never find a matching TLSA record, report that!
@@ -237,3 +243,8 @@ doAddr base refnames tlsards peerAddr = do
                               | otherwise     -> (Just depth, Pass)
                        | otherwise
                        -> go e (depth+1) cs
+
+    usable rds = [ u | RD_TLSA u s m _ <- rds
+                 , u `elem` [2,3]
+                 , s `elem` [0,1]
+                 , m `elem` [0,1,2] ]

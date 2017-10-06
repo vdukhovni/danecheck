@@ -15,6 +15,7 @@ data Opts = Opts
   , downMX      :: [String]
   , enableV4    :: Bool
   , enableV6    :: Bool
+  , useAll      :: Bool
   , addDays     :: Int
   , eeChecks    :: Bool
   , dnsDomain   :: String
@@ -99,6 +100,11 @@ parser = Opts
       ( long "ipv6"
      <> short '6'
      <> help "enable SMTP via IPv6" )
+
+  <*> switch
+      ( long "all"
+     <> short 'A'
+     <> help "scan all MX hosts, not just those with TLSA RRs" )
 
   <*> option auto
       ( long "days"
