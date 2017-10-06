@@ -40,8 +40,9 @@ The `danecheck` command options are as below.
     Usage: danecheck ([-N] | [-n|--nameserver ADDRESS]) [-t|--timeout TIMEOUT]
                      [-r|--tries NUMTRIES] [-H|--helo HELO]
                      [-s|--smtptimeout TIMEOUT] [-l|--linelimit LENGTH]
-                     [-R|--reserved] [-D|--down HOSTNAME] [-4|--noipv4] [-6|--ipv6]
-                     [-A|--all] [-d|--days DAYS] [-e|--eechecks] [DOMAIN]
+                     [-R|--reserved] [-D|--down HOSTNAME] [-U|--down-only]
+                     [-4|--noipv4] [-6|--ipv6] [-A|--all] [-d|--days DAYS]
+                     [-e|--eechecks] [DOMAIN]
     
     Available options:
       -h,--help                Show this help text
@@ -54,6 +55,7 @@ The `danecheck` command options are as below.
       -l,--linelimit LENGTH    Maximum server SMTP response LENGTH (default: 4096)
       -R,--reserved            connect to reserved IP addresses
       -D,--down HOSTNAME       Specify one or more HOSTNAMEs that are down
+      -U,--down-only           Limit connections to just the '-D' option hosts
       -4,--noipv4              disable SMTP via IPv4
       -6,--ipv6                enable SMTP via IPv6
       -A,--all                 scan all MX hosts, not just those with TLSA RRs
@@ -62,16 +64,23 @@ The `danecheck` command options are as below.
       DOMAIN                   check the specified DOMAIN (default: ".")
 
 When scanning the root domain, what's checked is secure retrieval
-of the root DNSKEY and SOA RRSets. Similarly, when scanning a
+of the root DNSKEY and SOA RRSets.  Similarly, when scanning a
 top-level domain, what's checked is secure retrieval of its DS,
-DNSKEY and SOA records. For all other domains, MX records, address
+DNSKEY and SOA records.  For all other domains, MX records, address
 records and TLSA records are retrieved and must be DNSSEC signed.
+
 Each MX host is expected to have TLSA records, an SMTP connection
-is made to each address of each such MX host (with the `-A` option
+is made to each address of each such MX host (with the '-A' option
 connections are made to all MX hosts). A TLS handshake is performed
 to retrieve the hosts's certificate chain which is verified against
-the DNS TLSA records. If anything is unavailable, insecure or wrong,
-a non-zero exit code is returned.
+the DNS TLSA RRs If anything is unavailable, insecure or wrong, a
+non-zero exit code is returned.
+
+The '-D' option can be used multiple times to skip SMTP connections
+to MX hosts that are expected to be down. The '-U' option inverts
+the action of the '-D' option, and connects to only those MX hosts
+that are specified via the '-D' option (none if no such hosts are
+specified).
 
 Reserved addresses include the address blocks from the IANA IPv4 and
 IPv6 special purpose address registries:

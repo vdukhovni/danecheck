@@ -20,6 +20,7 @@ import           Data.Char (toLower)
 import           Data.Int (Int64)
 import           Data.IP (AddrRange, IPv4, IPv6, isMatchedTo, makeAddrRange, toIPv4, toIPv6)
 import           Data.List (find)
+import           Data.Maybe (isJust, isNothing)
 import           Network.DNS (Domain, RData(..))
 import           Network.HostName (getHostName)
 import qualified Network.TLS as TLS
@@ -116,10 +117,12 @@ getAddrChains :: Domain   -- MX hostname
               -> [RData]  -- host address rdata
               -> Scanner [AddrChain]
 getAddrChains mx base names tlsards addrs = do
-    down <- gets $ Opts.downMX . scannerOpts
-    case find (== (d2s mx)) down of
-      Nothing -> mapM perAddr addrs
-      Just  _ -> return []
+    opts <- gets scannerOpts
+    let down = find (== (d2s mx)) (Opts.downMX opts)
+        skip = if_ (Opts.upsideDown opts) isNothing isJust
+    if skip down
+    then return []
+    else mapM perAddr addrs
   where
     perAddr :: RData -> Scanner AddrChain
     perAddr a = do
