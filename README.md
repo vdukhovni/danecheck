@@ -334,9 +334,9 @@ Here none of the TLSA record match the certificate chain:
       mail.dipietro.id.au[14.203.171.177]: fail: TLSA mismatch
         TLS = TLS12 with ECDHE-RSA-AES256GCM-SHA384
         name = cloud.dipietro.id.au
-    name = dipietro.id.au
+        name = dipietro.id.au
         name = mail.dipietro.id.au
-    name = www.dipietro.id.au
+        name = www.dipietro.id.au
         name = xmpp.dipietro.id.au
         depth = 0
           Issuer CommonName = Let's Encrypt Authority X3
