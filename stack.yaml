@@ -8,8 +8,6 @@ packages:
 extra-deps:
 - stringprep-1.0.0
 - punycode-2.0
-- dns-3.0.0
-- optparse-applicative-0.14.0.0
-resolver: lts-9.4
+resolver: lts-9.21
 ghc-options:
     "*": -Wall -O

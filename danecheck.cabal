@@ -61,7 +61,6 @@ Executable danecheck
     lifted-base,
     memory,
     monad-control,
-    mtl,
     network,
     optparse-applicative,
     safe-exceptions,
