@@ -10,4 +10,5 @@ extra-deps:
 - punycode-2.0
 resolver: lts-9.21
 ghc-options:
-    "*": -Wall -O
+    "$locals": -Wall
+    "$everything": -O2
