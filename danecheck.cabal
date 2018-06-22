@@ -1,5 +1,5 @@
 Name:                danecheck
-Version:             1.0.0.0
+Version:             1.0.1.0
 Synopsis:            DANE SMTP checker
 Description:         Check DANE TLSA security of an email domain
 License:             BSD3
