@@ -15,7 +15,8 @@ import           Control.Monad.Trans.Control (MonadBaseControl)
 import           Control.Monad.Trans.State.Strict (gets, modify)
 import           Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
-import           Data.Conduit (Source, Sink, yield, await)
+import           Data.Conduit (ConduitM, yield, await)
+import           Data.Void (Void)
 import           Network.Socket (Socket)
 import           Network.Socket.ByteString (recv, send)
 
@@ -26,7 +27,7 @@ sockWrite sock bs = do
   n <- liftBase $ send sock bs
   when (n < BS.length bs) $ sockWrite sock $ BS.drop n bs
 
-sockSink :: Sink ByteString SmtpM ()
+sockSink :: ConduitM ByteString Void SmtpM ()
 sockSink = do
   conn <- lift $ gets smtpConn
   case conn of
@@ -48,7 +49,7 @@ sockSink = do
 sockRead :: MonadBaseControl IO m => Socket -> Int -> m ByteString
 sockRead sock n = liftBase $ recv sock n
 
-sockSource :: Source SmtpM ByteString
+sockSource :: ConduitM () ByteString SmtpM ()
 sockSource = do
   conn <- lift $ gets smtpConn
   case conn of

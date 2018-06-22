@@ -21,9 +21,10 @@ import           Control.Monad.Trans.State.Strict (gets, modify)
 import           Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as LB
-import           Data.Conduit (Source, Sink, await, yield)
+import           Data.Conduit (ConduitM, await, yield)
 import           Data.Default.Class
 import           Data.Maybe (isJust, fromJust)
+import           Data.Void (Void)
 import qualified Data.X509.Validation as X509
 import qualified Data.X509.CertificateStore as X509
 import           Network.Socket (Socket)
@@ -80,7 +81,7 @@ tlsParams host mv_certs store =
       , TLS.clientDebug = def                    -- Can override DRBG seed
       }
 
-tlsSource :: Source SmtpM ByteString
+tlsSource :: ConduitM () ByteString SmtpM ()
 tlsSource = do
   conn <- lift $ gets smtpConn
   case conn of
@@ -110,7 +111,7 @@ tlsSource = do
 
     handleIO e = return $ Left $ DataErr e
 
-tlsSink :: Sink ByteString SmtpM ()
+tlsSink :: ConduitM ByteString Void SmtpM ()
 tlsSink = do
   conn <- lift $ gets smtpConn
   case conn of

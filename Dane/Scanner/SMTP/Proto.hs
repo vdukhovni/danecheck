@@ -10,7 +10,8 @@ import           Control.Monad.Trans.State.Strict (get, gets, modify)
 import qualified Control.Monad.Trans.State.Strict as ST
 import           Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
-import           Data.Conduit (Conduit, ConduitM, await, leftover, yield, ($$), (=$=))
+import           Data.Conduit (ConduitM, runConduit)
+import           Data.Conduit (await, leftover, yield, (.|))
 import           Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
@@ -34,11 +35,11 @@ data SmtpLine = FullLine ByteString
 
 -- | Used
 --
-takeLine :: Conduit ByteString SmtpM ByteString
+takeLine :: ConduitM ByteString ByteString SmtpM ()
          -> ConduitM ByteString ByteString SmtpM SmtpLine
 takeLine inner =
-  loop =$= do
-      b <- inner =$= foldC
+  loop .| do
+      b <- inner .| foldC
       rest <- await
       e <- lift $ gets smtpErr
       case (rest) of
@@ -125,7 +126,7 @@ smtpQuit _ r = do
       modify $ \s -> s { smtpErr = ProtoErr code $ replyText r }
   return BS.empty
 
-proto :: Conduit ByteString SmtpM ByteString
+proto :: ConduitM ByteString ByteString SmtpM ()
 proto = do
   -- Redo EHLO after TLS handshake
   st <- lift $ gets smtpState
@@ -165,13 +166,14 @@ proto = do
 
 dosmtp :: ProtoState -> IO ProtoState
 dosmtp start = do
-  st <- ST.execStateT (sockSource $$ proto =$= sockSink) start
+  st <- ST.execStateT (runConduit $ sockSource .| proto .| sockSink) start
   case smtpErr st of
     SmtpOK
       | smtpState st == DOTLS
       -> do
          tlsst <- ST.execStateT(startTLS) st
          case smtpErr tlsst of
-           SmtpOK -> ST.execStateT (tlsSource $$ proto =$= tlsSink) tlsst
+           SmtpOK -> flip ST.execStateT tlsst $ runConduit $
+                        tlsSource .| proto .| tlsSink
            _      -> return tlsst
     _ -> return st
