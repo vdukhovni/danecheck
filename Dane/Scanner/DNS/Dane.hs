@@ -16,8 +16,10 @@ import qualified Network.DNS as DNS
 import           Network.DNS
                    ( Domain
                    , RCODE(NoErr, NameErr)
+                   , FlagOp(..)
                    , RData(RD_MX)
                    , TYPE(A, AAAA, DNSKEY, DS, MX, SOA, TLSA)
+                   , adFlag
                    )
 
 import qualified Dane.Scanner.Opts as Opts
@@ -267,6 +269,7 @@ dnsSeed opts =
     let seed = DNS.defaultResolvConf
             { DNS.resolvRetry = Opts.dnsTries opts
             , DNS.resolvTimeout = 1000 * Opts.dnsTimeout opts
+            , DNS.resolvQueryFlags = adFlag FlagSet
             }
      in DNS.makeResolvSeed $ case Opts.dnsServer opts of
             Nothing -> seed

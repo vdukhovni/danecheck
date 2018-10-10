@@ -8,7 +8,7 @@ import           Data.List (partition, sort)
 import qualified Network.DNS as DNS
 import           Network.DNS (Domain, ResourceRecord(..))
 import           Network.DNS (RCODE(..), RData(..), TYPE(..))
-import           Network.DNS (withResolver, lookupRawAD)
+import           Network.DNS (withResolver, lookupRaw)
 
 import           Dane.Scanner.State
 import           Dane.Scanner.Util
@@ -97,7 +97,7 @@ response rc ad qname typ rs = do
 dnsLookup :: Domain -> TYPE -> Scanner (RC, AD, [ResourceRecord])
 dnsLookup qname typ = do
     seed <- gets scannerDnsSeed
-    reply <- liftIO $ withResolver seed $ \rv -> lookupRawAD rv qname typ
+    reply <- liftIO $ withResolver seed $ \rv -> lookupRaw rv qname typ
     case reply of
       Left DNS.TimeoutExpired -> return (DnsTimeout, False, [])
       Left (DNS.NetworkFailure e)  -> return (DnsXprtErr e, False, [])

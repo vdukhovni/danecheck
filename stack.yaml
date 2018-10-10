@@ -4,10 +4,10 @@ packages:
 - location: '.'
 - location: ./pkgs/idna-hs/
 - location: ./pkgs/dns/
-- location: ./pkgs/optparse-applicative/
 extra-deps:
 - stringprep-1.0.0
 - punycode-2.0
+- optparse-applicative-0.14.3.0
 resolver: lts-9.21
 ghc-options:
     "$locals": -Wall
