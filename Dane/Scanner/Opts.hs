@@ -1,3 +1,6 @@
+{-# LANGUAGE ApplicativeDo #-}
+{-# LANGUAGE RecordWildCards #-}
+
 module Dane.Scanner.Opts (Opts(..), getOpts) where
 
 import           Options.Applicative
@@ -5,21 +8,21 @@ import           Data.Char (toLower)
 import           Data.Monoid ((<>))
 
 data Opts = Opts
-  { dnsServer   :: Maybe String
-  , dnsTimeout  :: Int
-  , dnsTries    :: Int
-  , smtpHelo    :: Maybe String
-  , smtpTimeout :: Int
-  , smtpLineLen :: Int
-  , useReserved :: Bool
-  , downMX      :: [String]
-  , upsideDown  :: Bool
-  , enableV4    :: Bool
-  , enableV6    :: Bool
-  , useAll      :: Bool
-  , addDays     :: Int
-  , eeChecks    :: Bool
-  , dnsDomain   :: String
+  { dnsServer   :: !(Maybe String)
+  , dnsTimeout  :: !Int
+  , dnsTries    :: !Int
+  , smtpHelo    :: !(Maybe String)
+  , smtpTimeout :: !Int
+  , smtpLineLen :: !Int
+  , useReserved :: !Bool
+  , downMX      :: !([String])
+  , upsideDown  :: !Bool
+  , enableV4    :: !Bool
+  , enableV6    :: !Bool
+  , useAll      :: !Bool
+  , addDays     :: !Int
+  , eeChecks    :: !Bool
+  , dnsDomain   :: !String
   }
 
 parseN :: Parser (Maybe String)
@@ -37,11 +40,10 @@ parsen = Just <$> strOption
    <> help "Use nameserver at ADDRESS" )
 
 parser :: Parser Opts
-parser = Opts
+parser = do
+    dnsServer <- parseN <|> parsen
 
-  <$> ( parseN <|> parsen )
-
-  <*> option auto
+    dnsTimeout <- option auto
       ( long "timeout"
      <> short 't'
      <> metavar "TIMEOUT"
@@ -49,7 +51,7 @@ parser = Opts
      <> showDefaultWith (\t -> show t ++ " ms")
      <> help "DNS request TIMEOUT" )
 
-  <*> option auto
+    dnsTries <- option auto
       ( long "tries"
      <> short 'r'
      <> metavar "NUMTRIES"
@@ -57,14 +59,13 @@ parser = Opts
      <> showDefault
      <> help "at most NUMTRIES requests per lookup" )
 
-  <*> optional
-      ( strOption
-        ( long "helo"
-       <> short 'H'
-       <> metavar "HELO"
-       <> help "send specified client HELO name" ) )
+    smtpHelo <- optional ( strOption
+      ( long "helo"
+     <> short 'H'
+     <> metavar "HELO"
+     <> help "send specified client HELO name" ) )
 
-  <*> option auto
+    smtpTimeout <- option auto
       ( long "smtptimeout"
      <> short 's'
      <> metavar "TIMEOUT"
@@ -72,7 +73,7 @@ parser = Opts
      <> showDefaultWith (\t -> show t ++ " ms")
      <> help "SMTP TIMEOUT" )
 
-  <*> option auto
+    smtpLineLen <- option auto
       ( long "linelimit"
      <> short 'l'
      <> metavar "LENGTH"
@@ -80,55 +81,57 @@ parser = Opts
      <> showDefault
      <> help "Maximum server SMTP response LENGTH" )
 
-  <*> switch
+    useReserved <- switch
       ( long "reserved"
      <> short 'R'
      <> help "connect to reserved IP addresses" )
 
-  <*> many
+    downMX <- many
       ( (map toLower) <$> strOption
         ( long "down"
        <> short 'D'
        <> metavar "HOSTNAME"
        <> help "Specify one or more HOSTNAMEs that are down" ) )
 
-  <*> switch
+    upsideDown <- switch
       ( long "down-only"
      <> short 'U'
      <> help "Limit connections to just the '-D' option hosts" )
 
-  <*> ( not <$> switch
-        ( long "noipv4"
-       <> short '4'
-       <> help "disable SMTP via IPv4" ) )
+    enableV4 <- not <$> switch
+      ( long "noipv4"
+     <> short '4'
+     <> help "disable SMTP via IPv4" )
 
-  <*> switch
-      ( long "ipv6"
+    enableV6 <- not <$> switch
+      ( long "noipv6"
      <> short '6'
-     <> help "enable SMTP via IPv6" )
+     <> help "disable SMTP via IPv6" )
 
-  <*> switch
+    useAll <- switch
       ( long "all"
      <> short 'A'
      <> help "scan all MX hosts, not just those with TLSA RRs" )
 
-  <*> option auto
+    addDays <- option auto
       ( long "days"
      <> short 'd'
      <> metavar "DAYS"
      <> value 0
      <> help "check validity at DAYS in the future" )
 
-  <*> switch
+    eeChecks <- switch
       ( long "eechecks"
      <> short 'e'
      <> help "check end-entity (leaf) certificate dates and names" )
 
-  <*> strArgument
+    dnsDomain <- strArgument
       ( metavar "DOMAIN"
      <> value "."
      <> showDefault
      <> help "check the specified DOMAIN" )
+
+    return Opts{..}
 
 -- | Parse command-line switches
 --
