@@ -5,12 +5,14 @@ module Dane.Scanner.Opts (Opts(..), getOpts) where
 
 import           Options.Applicative
 import           Data.Char (toLower)
+import           Data.Word (Word16)
 import           Data.Monoid ((<>))
 
 data Opts = Opts
   { dnsServer   :: !(Maybe String)
   , dnsTimeout  :: !Int
   , dnsTries    :: !Int
+  , dnsUdpSize  :: !Word16
   , smtpHelo    :: !(Maybe String)
   , smtpTimeout :: !Int
   , smtpLineLen :: !Int
@@ -58,6 +60,14 @@ parser = do
      <> value 6
      <> showDefault
      <> help "at most NUMTRIES requests per lookup" )
+
+    dnsUdpSize <- option auto
+      ( long "udpsize"
+     <> short 'u'
+     <> metavar "SIZE"
+     <> value 1216
+     <> showDefault
+     <> help "set EDNS UDP buffer SIZE" )
 
     smtpHelo <- optional ( strOption
       ( long "helo"

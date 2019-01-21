@@ -269,7 +269,9 @@ dnsSeed opts =
     let seed = DNS.defaultResolvConf
             { DNS.resolvRetry = Opts.dnsTries opts
             , DNS.resolvTimeout = 1000 * Opts.dnsTimeout opts
-            , DNS.resolvQueryFlags = adFlag FlagSet
+            , DNS.resolvQueryControls =
+                  DNS.adFlag DNS.FlagSet <>
+                  DNS.ednsSetUdpSize (Just $ Opts.dnsUdpSize opts)
             }
      in DNS.makeResolvSeed $ case Opts.dnsServer opts of
             Nothing -> seed
