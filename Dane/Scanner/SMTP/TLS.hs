@@ -13,7 +13,6 @@ module Dane.Scanner.SMTP.TLS
 
 import           System.Timeout.Lifted (timeout)
 
-import           Control.Concurrent.MVar (MVar)
 import           Control.Exception.Safe (Handler(..), catches, toException)
 import           Control.Monad.Base (liftBase)
 import           Control.Monad.Trans.Class (lift)
@@ -23,6 +22,7 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as LB
 import           Data.Conduit (ConduitM, await, yield)
 import           Data.Default.Class
+import           Data.IORef (IORef)
 import           Data.Maybe (isJust, fromJust)
 import           Data.Void (Void)
 import qualified Data.X509.Validation as X509
@@ -42,15 +42,15 @@ nullCache = TLS.ValidationCache
   }
 
 tlsParams :: String
-          -> MVar ChainInfo
+          -> IORef ChainInfo
           -> X509.CertificateStore
           -> TLS.ClientParams
-tlsParams host mv_certs store =
+tlsParams host cref store =
   (TLS.defaultParamsClient host "smtp")
       { TLS.clientUseServerNameIndication = True
       , TLS.clientHooks = def
           { TLS.onCertificateRequest = \ _ -> return Nothing
-          , TLS.onServerCertificate  = genChainInfo mv_certs
+          , TLS.onServerCertificate  = genChainInfo cref
           , TLS.onSuggestALPN        = return Nothing
           }
       , TLS.clientShared    = def
@@ -179,9 +179,9 @@ startTLS = do
     go :: Socket -> SmtpM ()
     go sock = do
       servername <- gets serverName
-      mv_c <- gets mvCerts
+      cref <- gets chainRef
       store <- getStore Nothing
-      ctx <- TLS.contextNew sock $ tlsParams servername mv_c store
+      ctx <- TLS.contextNew sock $ tlsParams servername cref store
       tmout <- gets smtpTimeout
       res <- timeout tmout (doHandshake ctx)
       case res of

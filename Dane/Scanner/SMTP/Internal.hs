@@ -21,10 +21,10 @@ import           System.IO.Error as Sys
 import           GHC.IO.Exception (IOErrorType(EOF, TimeExpired))
 
 import           Control.Exception (SomeException, IOException)
-import           Control.Concurrent.MVar (MVar, newEmptyMVar)
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Trans.State.Strict (StateT, gets)
 import           Data.ByteString.Char8 (ByteString, pack)
+import           Data.IORef (IORef, newIORef)
 import           Data.Int (Int64)
 import           Network.Socket (Socket)
 import qualified Network.TLS as TLS
@@ -41,7 +41,7 @@ data ProtoState = ProtoState
   , llenLimit   :: ! Int
   , ioDeadline  :: ! Sys.TimeSpec
   , features    :: ! [SmtpFeature]
-  , mvCerts     :: MVar ChainInfo
+  , chainRef    :: ! (IORef ChainInfo)
   }
 
 type SmtpM = StateT ProtoState IO
@@ -102,7 +102,7 @@ startState :: String     -- ^ SMTP client EHLO name
            -> Socket     -- ^ Socket connected to the SMTP server
            -> IO ProtoState
 startState helo peer tout llen sock = do
-  mcert <- newEmptyMVar
+  cref <- newIORef undefined
   deadline <- timeLimit tout
   return ProtoState
     { smtpState = GREETING
@@ -114,7 +114,7 @@ startState helo peer tout llen sock = do
     , smtpErr    = SmtpOK
     , llenLimit  = llen
     , features   = []
-    , mvCerts    = mcert
+    , chainRef   = cref
     }
 
 ioErr :: String -> IOException -> IOException

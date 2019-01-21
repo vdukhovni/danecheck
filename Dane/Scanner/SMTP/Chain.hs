@@ -9,7 +9,6 @@ module Dane.Scanner.SMTP.Chain
     )
   where
 
-import           Control.Concurrent.MVar (takeMVar)
 import           Control.Exception (Exception, SomeException, toException)
 import           Control.Monad (when)
 import           Control.Monad.IO.Class (liftIO)
@@ -17,8 +16,9 @@ import           Control.Monad.Trans.State.Strict (gets)
 
 import qualified Data.ByteString.Char8 as BC (map, unpack, unsnoc)
 import           Data.Char (toLower)
-import           Data.Int (Int64)
+import           Data.IORef (readIORef)
 import           Data.IP (AddrRange, IPv4, IPv6, isMatchedTo, makeAddrRange, toIPv4, toIPv6)
+import           Data.Int (Int64)
 import           Data.List (find)
 import           Data.Maybe (isJust, isNothing)
 import           Network.DNS (Domain, RData(..))
@@ -186,7 +186,7 @@ doAddr base refnames tlsards peerAddr = do
           SmtpOK
             | SmtpTLS ctx <- smtpConn st
             -> do
-              (peerNames, peerCerts, peerTime) <- liftIO $ takeMVar (mvCerts st)
+              (peerNames, peerCerts, peerTime) <- liftIO $ readIORef (chainRef st)
               (peerTlsVersion, peerTlsCipher) <- liftIO $ tlsInfo ctx
               let Opts.Opts { Opts.addDays = off
                             , Opts.eeChecks = eechecks

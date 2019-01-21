@@ -11,7 +11,6 @@ module Dane.Scanner.SMTP.Certs
     , HostName
     ) where
 
-import           Control.Concurrent.MVar (MVar, putMVar)
 import           Crypto.Hash                      (hashWith)
 import           Crypto.Hash.Algorithms           (SHA256(..), SHA512(..))
 import           Data.ASN1.BinaryEncoding
@@ -22,6 +21,7 @@ import           Data.ByteString                  (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LB
 import           Data.Hourglass (timeConvert, DateTime)
+import           Data.IORef (IORef, writeIORef)
 import           Data.Int (Int64)
 import           Data.List (find)
 import           Data.Maybe (catMaybes)
@@ -60,15 +60,15 @@ type ChainInfo = ( [HostName] -- DNS-IDs or CN-ID from leaf cert
                  , Int64      -- Time observed
                  )
 
-genChainInfo :: MVar ChainInfo
+genChainInfo :: IORef ChainInfo
              -> CertificateStore
              -> ValidationCache
              -> ServiceID
              -> CertificateChain
              -> IO [FailedReason]
-genChainInfo mcerts _ _ _ chain = do
+genChainInfo cref _ _ _ chain = do
     now <- gettime
-    putMVar mcerts $ buildChain now chain
+    writeIORef cref $ buildChain now chain
     return [] -- Always succeed
 
 buildChain :: Int64 -> CertificateChain -> ChainInfo
