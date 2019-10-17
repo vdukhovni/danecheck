@@ -1,14 +1,11 @@
-flags: {}
-extra-package-dbs: []
+resolver: lts-14.10
 packages:
-- location: '.'
-- location: ./pkgs/idna-hs/
-- location: ./pkgs/dns/
+- .
+- ./pkgs/idna-hs/
 extra-deps:
 - stringprep-1.0.0
 - punycode-2.0
-- optparse-applicative-0.14.3.0
-resolver: lts-9.21
+flags: {}
 ghc-options:
     "$locals": -Wall
-    "$everything": -O2
+    "$everything": -O

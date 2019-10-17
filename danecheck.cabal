@@ -8,7 +8,7 @@ Author:              Viktor Dukhovni (with contributions from Peter Duchovni)
 Maintainer:          postfix-users@dukhovni.org
 Category:            Commands
 Build-Type:          Simple
-Cabal-Version:       >= 1.24
+Cabal-Version:       >= 2.0
 
 Executable danecheck
   HS-Source-Dirs: "."
