@@ -36,20 +36,21 @@ The `danecheck` command options are as below.
 
     $ danecheck --help
     danecheck - check for and validate SMTP TLSA records
-    
-    Usage: danecheck ([-N] | [-n|--nameserver ADDRESS]) [-t|--timeout TIMEOUT]
-                     [-r|--tries NUMTRIES] [-H|--helo HELO]
-                     [-s|--smtptimeout TIMEOUT] [-l|--linelimit LENGTH]
-                     [-R|--reserved] [-D|--down HOSTNAME] [-U|--down-only]
-                     [-4|--noipv4] [-6|--ipv6] [-A|--all] [-d|--days DAYS]
+
+    Usage: danecheck [-N | (-n|--nameserver ADDRESS)] [-t|--timeout TIMEOUT] 
+                     [-r|--tries NUMTRIES] [-u|--udpsize SIZE] [-H|--helo HELO] 
+                     [-s|--smtptimeout TIMEOUT] [-l|--linelimit LENGTH] 
+                     [-R|--reserved] [-D|--down HOSTNAME] [-U|--down-only] 
+                     [-4|--noipv4] [-6|--noipv6] [-A|--all] [-d|--days DAYS] 
                      [-e|--eechecks] [DOMAIN]
-    
+
     Available options:
       -h,--help                Show this help text
       -N                       Use /etc/resolv.conf nameserver list
       -n,--nameserver ADDRESS  Use nameserver at ADDRESS (default: "127.0.0.1")
       -t,--timeout TIMEOUT     DNS request TIMEOUT (default: 3000 ms)
       -r,--tries NUMTRIES      at most NUMTRIES requests per lookup (default: 6)
+      -u,--udpsize SIZE        set EDNS UDP buffer SIZE (default: 1216)
       -H,--helo HELO           send specified client HELO name
       -s,--smtptimeout TIMEOUT SMTP TIMEOUT (default: 30000 ms)
       -l,--linelimit LENGTH    Maximum server SMTP response LENGTH (default: 4096)
@@ -57,7 +58,7 @@ The `danecheck` command options are as below.
       -D,--down HOSTNAME       Specify one or more HOSTNAMEs that are down
       -U,--down-only           Limit connections to just the '-D' option hosts
       -4,--noipv4              disable SMTP via IPv4
-      -6,--ipv6                enable SMTP via IPv6
+      -6,--noipv6              disable SMTP via IPv6
       -A,--all                 scan all MX hosts, not just those with TLSA RRs
       -d,--days DAYS           check validity at DAYS in the future
       -e,--eechecks            check end-entity (leaf) certificate dates and names
@@ -161,10 +162,9 @@ RRSets and not print the ERROR message.  For example (key base64
 data abbreviated):
 
     $ danecheck
-    . IN DNSKEY 256 3 8 AwEAAYvxrQOO...L1KLSdmoIYM= ; AD=1 NoError
-    . IN DNSKEY 257 3 8 AwEAAagAIKlV...QxA+Uk1ihz0= ; AD=1 NoError
-    . IN DNSKEY 257 3 8 AwEAAaz/tAm8...R1AkUTV74bU= ; AD=1 NoError
-    . IN SOA a.root-servers.net. nstld@verisign-grs.com. 2017091601 1800 900 604800 86400 ; AD=1 NoError
+    . IN DNSKEY 256 3 8 AwEAAbPwrxwt...I5QymeSkJJzc= ; AD=1 NoError
+    . IN DNSKEY 257 3 8 AwEAAaz/tAm8...NR1AkUTV74bU= ; AD=1 NoError
+    . IN SOA a.root-servers.net. nstld@verisign-grs.com. 2019101700 1800 900 604800 86400 ; AD=1 NoError
 
 The ` ; AD=1 NoError` DNS comments appended to each output line indicates
 that the resolver obtained a DNSSEC validated result.  The `.` between the
@@ -183,13 +183,13 @@ status of a TLD `danecheck` outputs its DS, DNSKEY and SOA RRsets.
 For example:
 
     $ danecheck org
-    org. IN DS 9795 7 1 364dfab3daf2...766ddaa24982 ; AD=1 NoError
-    org. IN DS 9795 7 2 3922b31b6f3a...891bfe7ff8e5 ; AD=1 NoError
-    org. IN DNSKEY 256 3 7 AwEAAXxsMmN/...Vb99Wac24Fk7 ; AD=1 NoError
-    org. IN DNSKEY 256 3 7 AwEAAayiVbuM...xTc1wZtAKVjr ; AD=1 NoError
-    org. IN DNSKEY 257 3 7 AwEAAZTjbIO5...8ti6MNoJEHU= ; AD=1 NoError
-    org. IN DNSKEY 257 3 7 AwEAAcMnWBKL...wXCNDXk0kk0= ; AD=1 NoError
-    org. IN SOA a0.org.afilias-nst.info. noc@afilias-nst.info. 2012659235 1800 900 604800 86400 ; AD=1 NoError
+    org. IN DS 9795 7 1 364dfab3daf254cab477b5675b10766ddaa24982 ; AD=1 NoError
+    org. IN DS 9795 7 2 3922b31b6f3a4ea92b19eb7b52120f031fd8e05ff0b03bafcf9f891bfe7ff8e5 ; AD=1 NoError
+    org. IN DNSKEY 256 3 7 AwEAAb7ojfnp...nL5k7Y/VeZRpR ; AD=1 NoError
+    org. IN DNSKEY 256 3 7 AwEAAdEExfqc...9U9q91zgJ9bkn ; AD=1 NoError
+    org. IN DNSKEY 257 3 7 AwEAAZTjbIO5...r8ti6MNoJEHU= ; AD=1 NoError
+    org. IN DNSKEY 257 3 7 AwEAAcMnWBKL...nwXCNDXk0kk0= ; AD=1 NoError
+    org. IN SOA a0.org.afilias-nst.info. noc@afilias-nst.info. 2013668330 1800 900 604800 86400 ; AD=1 NoError
 
 ## Checking your own domain
 
@@ -198,33 +198,49 @@ your TLD, you can proceed to regularly test your own domain.  Example:
 
     $ domain=openssl.org
     $ danecheck "$domain" || printf "ERROR: DANE security check failed for: %s\n" "$domain"
-    openssl.org. IN DS 44671 8 2 30abf6c1b7de...ae7c474f83f9 ; AD=1 NoError
-    openssl.org. IN DNSKEY 256 3 8 AwEAAaJsnu//...0lJQkbhta8V7 ; AD=1 NoError
-    openssl.org. IN DNSKEY 257 3 8 AwEAAbxptd2o...BUsIsxlbmYs= ; AD=1 NoError
+    openssl.org. IN DS 44671 8 2 30abf6c1b7de947ddf1c1b01206c126685e5eda880bf9dc8815eae7c474f83f9 ; AD=1 NoError
+    openssl.org. IN DNSKEY 256 3 8 AwEAAaJsnu//...v0lJQkbhta8V7 ; AD=1 NoError
+    openssl.org. IN DNSKEY 257 3 8 AwEAAbxptd2o...XBUsIsxlbmYs= ; AD=1 NoError
     openssl.org. IN MX 50 mta.openssl.org. ; AD=1 NoError
     mta.openssl.org. IN A 194.97.150.230 ; AD=1 NoError
     mta.openssl.org. IN AAAA 2001:608:c00:180::1:e6 ; AD=1 NoError
-    _25._tcp.mta.openssl.org. IN CNAME wildcard._dane.openssl.org. ; AD=1 NoError
-    wildcard._dane.openssl.org. IN TLSA 3 1 1 687c07fbe249...b911c93ecaca ; AD=1 NoError
-      mta.openssl.org[194.97.150.230]: pass: TLSA match: depth = 0, name = openssl.org
-        TLS = TLS12 with ECDHE-RSA-AES256GCM-SHA384
-        name = *.openssl.org
-        name = openssl.org
+    _25._tcp.mta.openssl.org. IN TLSA 3 1 1 6cf12d78fbf242909d01b96ab5590812954058dc32f8415f048fff064291921e ; AD=1 NoError
+      mta.openssl.org[194.97.150.230]: pass: TLSA match: depth = 0, name = mta.openssl.org
+        TLS = TLS12 with ECDHE-RSA-AES256GCM-SHA384,P256
+        name = mta.openssl.org
         depth = 0
-          Issuer CommonName = GlobalSign Domain Validation CA - SHA256 - G2
-          Issuer Organization = GlobalSign nv-sa
-          notBefore = 2014-10-09T20:29:00Z
-          notAfter = 2017-11-12T17:14:05Z
-          Subject CommonName = *.openssl.org
-          pkey sha256 [matched] <- 3 1 1 687c07fbe249...b911c93ecaca
+          Issuer CommonName = Let's Encrypt Authority X3
+          Issuer Organization = Let's Encrypt
+          notBefore = 2019-08-26T11:00:16Z
+          notAfter = 2019-11-24T11:00:16Z
+          Subject CommonName = mta.openssl.org
+          pkey sha256 [matched] <- 3 1 1 6cf12d78fbf242909d01b96ab5590812954058dc32f8415f048fff064291921e
         depth = 1
-          Issuer CommonName = GlobalSign Root CA
-          Issuer Organization = GlobalSign nv-sa
-          notBefore = 2014-02-20T10:00:00Z
-          notAfter = 2024-02-20T10:00:00Z
-          Subject CommonName = GlobalSign Domain Validation CA - SHA256 - G2
-          Subject Organization = GlobalSign nv-sa
-          pkey sha256 [nomatch] <- 2 1 1 3cbd7f4d30c4...20726c7130a6c
+          Issuer CommonName = DST Root CA X3
+          Issuer Organization = Digital Signature Trust Co.
+          notBefore = 2016-03-17T16:40:46Z
+          notAfter = 2021-03-17T16:40:46Z
+          Subject CommonName = Let's Encrypt Authority X3
+          Subject Organization = Let's Encrypt
+          pkey sha256 [nomatch] <- 2 1 1 60b87575447dcba2a36b7d11ac09fb24a9db406fee12d2cc90180517616e8a18
+      mta.openssl.org[2001:608:c00:180::1:e6]: pass: TLSA match: depth = 0, name = mta.openssl.org
+        TLS = TLS12 with ECDHE-RSA-AES256GCM-SHA384,P256
+        name = mta.openssl.org
+        depth = 0
+          Issuer CommonName = Let's Encrypt Authority X3
+          Issuer Organization = Let's Encrypt
+          notBefore = 2019-08-26T11:00:16Z
+          notAfter = 2019-11-24T11:00:16Z
+          Subject CommonName = mta.openssl.org
+          pkey sha256 [matched] <- 3 1 1 6cf12d78fbf242909d01b96ab5590812954058dc32f8415f048fff064291921e
+        depth = 1
+          Issuer CommonName = DST Root CA X3
+          Issuer Organization = Digital Signature Trust Co.
+          notBefore = 2016-03-17T16:40:46Z
+          notAfter = 2021-03-17T16:40:46Z
+          Subject CommonName = Let's Encrypt Authority X3
+          Subject Organization = Let's Encrypt
+          pkey sha256 [nomatch] <- 2 1 1 60b87575447dcba2a36b7d11ac09fb24a9db406fee12d2cc90180517616e8a18
 
 If the exit code indicates failure you should check the output for:
 
