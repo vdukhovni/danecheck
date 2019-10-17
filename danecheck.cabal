@@ -1,5 +1,5 @@
 Name:                danecheck
-Version:             1.0.2.0
+Version:             1.1.0
 Synopsis:            DANE SMTP checker
 Description:         Check DANE TLSA security of an email domain
 License:             BSD3
@@ -44,7 +44,7 @@ Executable danecheck
     asn1-encoding,
     asn1-types,
     attoparsec,
-    base >= 4.9,
+    base >= 4.9 && < 5,
     base16-bytestring,
     bytestring,
     clock,
@@ -53,7 +53,7 @@ Executable danecheck
     containers,
     cryptonite,
     data-default-class,
-    dns,
+    dns >= 4.0.0 && < 5,
     hostname,
     hourglass,
     idna,
