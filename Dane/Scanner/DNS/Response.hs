@@ -23,6 +23,7 @@ import           Foreign.C.Types (CTime(..))
 import           GHC.IO.Exception (ioe_description, ioe_filename, ioe_location)
 import           Network.DNS (Domain, RCODE(..), TYPE(AAAA, CNAME))
 import           Network.DNS (RData(RD_A, RD_AAAA, RD_TLSA))
+import           Network.TLS as TLS
 
 import           Dane.Scanner.Util
 import           Dane.Scanner.SMTP.Certs
@@ -259,11 +260,23 @@ instance Show Response where
                                  | otherwise
                                  -> "pass: TLSA match: depth = " ++ (show d)
                   in "  " ++ base ++ "[" ++ addr ++ "]: " ++ auth ++ "\n" ++
-                     showTLS peerTlsVersion peerTlsCipher ++
+                     showTLS peerTlsVersion peerTlsCipher peerTlsGroup peerCerts ++
                      concatMap showName peerNames ++
                      concatMap showCert peerCerts
           where
-              showTLS v c  = "    TLS = " ++ (show v) ++ " with " ++ (show c) ++ "\n"
+              showTLS v c g cs =
+                  "    TLS = " ++ show v ++ case g of
+                      Nothing  -> " with " ++ show c
+                      Just grp -> " with " ++ show c
+                                           ++ ","
+                                           ++ show grp
+                                           ++ leafCertAlg
+                                           ++ "\n"
+                where
+                  leafCertAlg = case cs of
+                      CertInfo{..}:_
+                          | v > TLS.TLS12 -> "," ++ show _alg
+                      _                   -> ""
               showName n = "    name = " ++ n ++ "\n"
               showCert CertInfo{..} =
                   showDepth _depth ++

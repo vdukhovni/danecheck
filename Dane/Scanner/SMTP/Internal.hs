@@ -28,7 +28,6 @@ import           Data.IORef (IORef, newIORef)
 import           Data.Int (Int64)
 import           Network.Socket (Socket)
 import qualified Network.TLS as TLS
-import           Text.Show (showString, showChar)
 import           Dane.Scanner.SMTP.Certs (ChainInfo)
 
 data ProtoState = ProtoState

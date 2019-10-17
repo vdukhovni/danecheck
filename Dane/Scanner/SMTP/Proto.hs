@@ -12,7 +12,6 @@ import           Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import           Data.Conduit (ConduitM, runConduit)
 import           Data.Conduit (await, leftover, yield, (.|))
-import           Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
 

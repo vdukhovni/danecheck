@@ -4,14 +4,13 @@
 module Dane.Scanner.SMTP.Parse (SmtpReply(..), parseReply)
   where
 
-import           Control.Applicative ( (<|>), (*>) )
+import           Control.Applicative ( (<|>) )
 import           Control.Monad (mzero)
 import           Data.Attoparsec.ByteString.Char8 (Parser, parseOnly)
 import qualified Data.Attoparsec.ByteString.Char8 as AP
 import qualified Data.ByteString.Char8 as BC
 import           Data.Char (ord)
 import           Data.Either (isLeft)
-import           Data.Monoid (mconcat)
 
 import           Dane.Scanner.SMTP.Internal
 

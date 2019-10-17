@@ -47,6 +47,7 @@ data CertInfo = CertInfo { _depth :: !Int -- chain depth
                          , _hashes :: !CertHashes
                          , _cert :: !ByteString -- Cert as DER ByteString
                          , _spki :: !ByteString -- Cert as DER ByteString
+                         , _alg :: !PubKeyALG
                          }
 
 cnOf :: DistinguishedName -> Maybe String
@@ -90,6 +91,7 @@ buildChain now (CertificateChain xs) =
                 _idn = certIssuerDN cert
                 _life = getDates cert
                 _sdn = certSubjectDN cert
+                _alg = pubkeyToAlg $ certPubKey cert
              in CertInfo{..}
 
         getDates :: Certificate -> LifeSpan

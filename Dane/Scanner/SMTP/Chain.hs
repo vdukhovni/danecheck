@@ -67,6 +67,7 @@ data PeerChain =
         , peerTime       :: !Int64
         , peerTlsVersion :: !TLS.Version
         , peerTlsCipher  :: !TLS.Cipher
+        , peerTlsGroup   :: !(Maybe TLS.Group)
         }
   | SmtpError SmtpState Int String
   | ChainException SomeException
@@ -187,7 +188,7 @@ doAddr base refnames tlsards peerAddr = do
             | SmtpTLS ctx <- smtpConn st
             -> do
               (peerNames, peerCerts, peerTime) <- liftIO $ readIORef (chainRef st)
-              (peerTlsVersion, peerTlsCipher) <- liftIO $ tlsInfo ctx
+              (peerTlsVersion, peerTlsCipher, peerTlsGroup) <- liftIO $ tlsInfo ctx
               let Opts.Opts { Opts.addDays = off
                             , Opts.eeChecks = eechecks
                             } = opts

@@ -10,16 +10,13 @@ import           Control.Monad.Trans.State.Strict (gets)
 
 import qualified Data.ByteString.Char8 as BC
 import           Data.List (nub, sortOn)
-import           Data.Monoid ((<>))
 
 import qualified Network.DNS as DNS
 import           Network.DNS
                    ( Domain
                    , RCODE(NoErr, NameErr)
-                   , FlagOp(..)
                    , RData(RD_MX)
                    , TYPE(A, AAAA, DNSKEY, DS, MX, SOA, TLSA)
-                   , adFlag
                    )
 
 import qualified Dane.Scanner.Opts as Opts

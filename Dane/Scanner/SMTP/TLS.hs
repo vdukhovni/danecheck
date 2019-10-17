@@ -16,22 +16,23 @@ import           System.Timeout.Lifted (timeout)
 import           Control.Exception.Safe (Handler(..), catches, toException)
 import           Control.Monad.Base (liftBase)
 import           Control.Monad.Trans.Class (lift)
-import           Control.Monad.Trans.State.Strict (gets, modify)
+import           Control.Monad.Trans.State.Strict (gets, modify')
 import           Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as LB
 import           Data.Conduit (ConduitT, Void, await, yield)
 import           Data.Default.Class
 import           Data.IORef (IORef)
-import           Data.Maybe (isJust, fromJust)
+import           Data.Maybe (isJust)
 import qualified Data.X509.Validation as X509
 import qualified Data.X509.CertificateStore as X509
 import           Network.Socket (Socket)
+import           Network.TLS (Version(TLS10, TLS11, TLS12, TLS13))
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
 
-import           Dane.Scanner.SMTP.Internal
 import           Dane.Scanner.SMTP.Certs
+import           Dane.Scanner.SMTP.Internal
 
 -- callback args: serviceid fingerprint certificate
 nullCache :: X509.ValidationCache
@@ -60,16 +61,10 @@ tlsParams host cref store =
           }
       , TLS.clientSupported = def
           { TLS.supportedCiphers = TLS.ciphersuite_strong
-          , TLS.supportedVersions = [TLS.TLS12, TLS.TLS11, TLS.TLS10] -- XXX: Floor?
+          , TLS.supportedVersions = [TLS13, TLS12, TLS11, TLS10]
           , TLS.supportedCompressions = [TLS.nullCompression]
-          , TLS.supportedHashSignatures =
-              (,) <$> [ TLS.HashSHA384
-                      , TLS.HashSHA256
-                      , TLS.HashSHA1
-                      ]
-                  <*> [ TLS.SignatureECDSA
-                      , TLS.SignatureRSA
-                      ]
+          , TLS.supportedHashSignatures = tls13sigs ++ tls12sigs
+          , TLS.supportedGroups = [TLS.X25519, TLS.P256, TLS.P384, TLS.P521]
           , TLS.supportedSecureRenegotiation = True
           , TLS.supportedSession = False
           , TLS.supportedFallbackScsv = False
@@ -79,6 +74,21 @@ tlsParams host cref store =
       , TLS.clientUseMaxFragmentLength = Nothing -- not space constrained
       , TLS.clientDebug = def                    -- Can override DRBG seed
       }
+  where
+    tls12sigs =
+      (,) <$> [ TLS.HashSHA384
+              , TLS.HashSHA256
+              , TLS.HashSHA1
+              ]
+          <*> [ TLS.SignatureECDSA
+              , TLS.SignatureRSA
+              ]
+    tls13sigs =
+      (,) <$> [ TLS.HashIntrinsic ]
+          <*> [ TLS.SignatureRSApssRSAeSHA256
+              , TLS.SignatureRSApssRSAeSHA384
+              , TLS.SignatureRSApssRSAeSHA512
+              ]
 
 tlsSource :: ConduitT () ByteString SmtpM ()
 tlsSource = do
@@ -94,11 +104,11 @@ tlsSource = do
           | Right bs <- x
           -> if (BC.length bs > 0)
              then yield bs >> go ctx
-             else lift $ modify $
+             else lift $ modify' $
                \s -> s { smtpErr = DataErr $ eofErr "TLS read" }
           | Left e  <- x
-          -> lift $ modify $ \s -> s { smtpErr = e }
-        _ -> lift $ modify $
+          -> lift $ modify' $ \s -> s { smtpErr = e }
+        _ -> lift $ modify' $
                \s -> s { smtpErr = DataErr $ timeErr "TLS read" }
 
     doRecv ctx = (Right <$> TLS.recvData ctx) `catches`
@@ -123,8 +133,8 @@ tlsSink = do
         Just x
           | Right _ <- x -> go ctx
           | Left e  <- x
-          -> lift $ modify $ \s -> s { smtpErr = e}
-        _ -> lift $ modify $
+          -> lift $ modify' $ \s -> s { smtpErr = e }
+        _ -> lift $ modify' $
                \s -> s { smtpErr = DataErr $ timeErr "TLS write" }
       )
 
@@ -149,8 +159,8 @@ endTLS = do
       case res of
         Just x
           | Right _ <- x -> return ()
-          | Left  e <- x -> modify $ \s -> s { smtpErr = e }
-        _ -> modify $ \s -> s { smtpErr = DataErr $ timeErr "shutdown" }
+          | Left  e <- x -> modify' $ \s -> s { smtpErr = e }
+        _ -> modify' $ \s -> s { smtpErr = DataErr $ timeErr "shutdown" }
 
     doBye ctx = (Right <$> TLS.bye ctx) `catches`
         [ Handler handleTLS, Handler handleIO ]
@@ -188,10 +198,11 @@ startTLS = do
           | Right _ <- x
           -> do
              deadline <- liftBase $ timeLimit tmout
-             modify $ \s -> s { smtpConn = SmtpTLS ctx, ioDeadline = deadline }
+             modify' $
+                 \s -> s { smtpConn = SmtpTLS ctx, ioDeadline = deadline }
           | Left e  <- x
-          -> modify $ \s -> s { smtpErr = e }
-        _ -> modify $ \s -> s { smtpErr = DataErr $ timeErr "handshake" }
+          -> modify' $ \s -> s { smtpErr = e }
+        _ -> modify' $ \s -> s { smtpErr = DataErr $ timeErr "handshake" }
 
     getStore :: Maybe FilePath -> SmtpM X509.CertificateStore
     getStore cafp =
@@ -209,7 +220,10 @@ startTLS = do
 
     handleIO e = return $ Left $ DataErr e
 
-tlsInfo :: TLS.Context -> IO (TLS.Version, TLS.Cipher)
+tlsInfo :: TLS.Context -> IO (TLS.Version, TLS.Cipher, Maybe TLS.Group)
 tlsInfo ctx = do
-  i <- TLS.contextGetInformation ctx
-  return $ (,) <$> TLS.infoVersion <*> TLS.infoCipher $ fromJust i
+  ~(Just i) <- TLS.contextGetInformation ctx
+  return $ (,,) <$> TLS.infoVersion
+                <*> TLS.infoCipher
+                <*> TLS.infoNegotiatedGroup
+                 $! i

@@ -6,7 +6,6 @@ module Dane.Scanner.Opts (Opts(..), getOpts) where
 import           Options.Applicative
 import           Data.Char (toLower)
 import           Data.Word (Word16)
-import           Data.Monoid ((<>))
 
 data Opts = Opts
   { dnsServer   :: !(Maybe String)
