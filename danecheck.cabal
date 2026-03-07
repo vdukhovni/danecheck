@@ -1,14 +1,20 @@
+cabal-version: 3.12
+
 Name:                danecheck
-Version:             1.1.0
+Version:             1.2.0
 Synopsis:            DANE SMTP checker
 Description:         Check DANE TLSA security of an email domain
-License:             BSD3
+License:             BSD-3-Clause
 License-File:        LICENSE
 Author:              Viktor Dukhovni (with contributions from Peter Duchovni)
 Maintainer:          postfix-users@dukhovni.org
 Category:            Commands
 Build-Type:          Simple
-Cabal-Version:       >= 2.0
+tested-with: GHC == 9.6.4
+           , GHC == 9.8.1
+           , GHC == 9.10.3
+           , GHC == 9.12.2
+           , GHC == 9.14.1
 
 Executable danecheck
   HS-Source-Dirs: "."
@@ -41,37 +47,36 @@ Executable danecheck
     Dane.Scanner.SMTP.TLS
 
   Build-Depends:
-    asn1-encoding,
-    asn1-types,
-    attoparsec,
+    attoparsec < 0.15,
     base >= 4.9 && < 5,
-    base16-bytestring,
-    bytestring,
-    clock,
-    conduit,
-    conduit-combinators,
-    containers,
-    cryptonite,
-    data-default-class,
-    dns >= 4.0.0 && < 5,
-    hostname,
-    hourglass,
-    idna,
-    iproute,
-    lifted-base,
-    memory,
-    monad-control,
-    network,
-    optparse-applicative >= 0.14,
-    safe-exceptions,
-    stm,
-    text,
-    tls,
-    transformers,
-    transformers-base,
-    unix,
-    unix-time,
-    x509,
-    x509-store,
-    x509-system,
-    x509-validation
+    base16-bytestring >=1.0 && < 1.1,
+    bytestring >= 0.10 && < 0.13,
+    clock >= 0.8 && < 0.9,
+    conduit >=1.2 && < 1.4,
+    conduit-combinators >= 1.2 && < 1.4,
+    containers >= 0.6 && < 0.9,
+    crypton ^>= 1.0,
+    crypton-asn1-encoding >= 0.9 && < 0.11,
+    crypton-asn1-types >= 0.3 && < 0.5,
+    crypton-x509 >= 1.7 && < 1.9,
+    crypton-x509-store >= 1.7 && < 1.9,
+    crypton-x509-validation >= 1.7 && < 1.9,
+    data-default-class >= 0.1 && < 0.3,
+    dns >= 4.0 && < 4.3,
+    hostname ^>= 1.0,
+    idn ^>= 0.1,
+    iproute >= 1.6 && < 1.8,
+    lifted-base >= 0.1 && < 0.3,
+    memory >= 0.17 && < 0.19,
+    monad-control ^>= 1.0,
+    network >= 3.0 && < 3.3,
+    optparse-applicative >= 0.14 && < 0.20,
+    safe-exceptions ^>= 0.1,
+    stm >= 2.0 && < 2.6,
+    text >= 1.2 && < 2.2,
+    time-hourglass >= 0.2 && < 0.4,
+    tls >= 2.0 && < 2.3,
+    transformers >= 0.5 && < 0.7,
+    transformers-base >= 0.3 && < 0.5,
+    unix >= 2.7 && < 2.9,
+    unix-time >= 0.3 && < 0.5

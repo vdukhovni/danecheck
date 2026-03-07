@@ -63,32 +63,14 @@ tlsParams host cref store =
           { TLS.supportedCiphers = TLS.ciphersuite_strong
           , TLS.supportedVersions = [TLS13, TLS12, TLS11, TLS10]
           , TLS.supportedCompressions = [TLS.nullCompression]
-          , TLS.supportedHashSignatures = tls13sigs ++ tls12sigs
-          , TLS.supportedGroups = [TLS.X25519, TLS.P256, TLS.P384, TLS.P521]
           , TLS.supportedSecureRenegotiation = True
           , TLS.supportedSession = False
           , TLS.supportedFallbackScsv = False
           , TLS.supportedEmptyPacket = True
           }
       , TLS.clientWantSessionResume = Nothing    -- no session to resume
-      , TLS.clientUseMaxFragmentLength = Nothing -- not space constrained
       , TLS.clientDebug = def                    -- Can override DRBG seed
       }
-  where
-    tls12sigs =
-      (,) <$> [ TLS.HashSHA384
-              , TLS.HashSHA256
-              , TLS.HashSHA1
-              ]
-          <*> [ TLS.SignatureECDSA
-              , TLS.SignatureRSA
-              ]
-    tls13sigs =
-      (,) <$> [ TLS.HashIntrinsic ]
-          <*> [ TLS.SignatureRSApssRSAeSHA256
-              , TLS.SignatureRSApssRSAeSHA384
-              , TLS.SignatureRSApssRSAeSHA512
-              ]
 
 tlsSource :: ConduitT () ByteString SmtpM ()
 tlsSource = do
@@ -225,5 +207,5 @@ tlsInfo ctx = do
   ~(Just i) <- TLS.contextGetInformation ctx
   return $ (,,) <$> TLS.infoVersion
                 <*> TLS.infoCipher
-                <*> TLS.infoNegotiatedGroup
+                <*> TLS.infoSupportedGroup
                  $! i

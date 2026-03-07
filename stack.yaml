@@ -1,10 +1,10 @@
-resolver: lts-14.10
+system-ghc: true
+install-ghc: false
+resolver: lts-24.32
 packages:
 - .
-- ./pkgs/idna-hs/
 extra-deps:
-- stringprep-1.0.0
-- punycode-2.0
+- idn-0.1.2.0
 flags: {}
 ghc-options:
     "$locals": -Wall

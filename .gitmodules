@@ -1,3 +1,0 @@
-[submodule "pkgs/idna-hs"]
-	path = pkgs/idna-hs
-	url = https://github.com/vdukhovni/idna-hs.git

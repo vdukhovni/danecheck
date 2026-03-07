@@ -1,8 +1,11 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ViewPatterns #-}
 module Dane.Scanner.DNS.Toascii (toascii) where
 
-import           Data.Char (chr)
+import qualified Data.List as L
 import qualified Data.Text as T
-import qualified Text.IDNA as IDNA
+import Data.Char (chr, toLower)
+import Data.Text.IDN (toASCII, IDNError(EmptyLabel))
 
 -- Besides U+002E (full stop) IDNA2003 allows DNS labels to be
 -- separated by any of the Unicode variants U+3002 (ideographic
@@ -12,30 +15,21 @@ import qualified Text.IDNA as IDNA
 dots :: [Char]
 dots = map chr [0x002E, 0x3002, 0xFF0E, 0xFF61]
 
-encode :: T.Text -> Maybe T.Text
-encode label
-  | (label == T.empty) = Nothing
-  | otherwise = IDNA.toASCII True True label
+brk :: String -> (String, String)
+brk = L.break (`elem` dots)
 
-convert_labels :: [T.Text] -> Maybe String
-convert_labels labels =
-  ascii_labels |$> reverse
-               |$> T.intercalate (T.singleton '.')
-               |$> T.toLower
-               |$> T.unpack
-  where ascii_labels = sequence $ map encode labels
+toascii :: String -> Either IDNError [T.Text]
+toascii (brk -> (l0, ls0)) = reverse <$> go [] l0 ls0
+  where
+    go acc l@(_:_) = \ case
+        (_ : (brk -> (m, ms))) -> convert acc l >>= \a -> go a m ms
+        _                      -> convert acc l
+    go acc _ = \ case
+        ""   | _:_ <- acc -> Right acc
+             | otherwise  -> Left EmptyLabel
+        _:[] | [] <- acc  -> Right acc
+        _                 -> Left EmptyLabel
 
-infixl 1 |$>
-(|$>) :: (Functor f) => f a -> (a -> b) -> f b
-(|$>) = flip fmap
-
-toascii :: String -> Maybe String
-toascii s =
-  case janet of
-  [] -> Nothing
-  x:xs | (x == T.empty &&
-          length xs == 1 &&
-          (T.null $ head xs)) -> Just "."
-       | (x == T.empty) -> convert_labels xs
-       | otherwise -> convert_labels janet
-  where janet = reverse $ T.split (`elem` dots) $ T.pack s
+    convert acc (T.pack . map toLower -> label)
+        | T.all (<= '\x7f') label = Right (label : acc)
+        | otherwise             = (: acc) <$> toASCII label

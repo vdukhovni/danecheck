@@ -1,0 +1,35 @@
+packages: .
+
+allow-newer:
+    base,
+    binary,
+    containers,
+    time
+
+constraints:
+  mlkem +use_crypton,
+  base installed,
+  array installed,
+  binary installed,
+  bytestring installed,
+  containers installed,
+  deepseq installed,
+  directory installed,
+  exceptions installed,
+  file-io installed,
+  filepath installed,
+  ghc installed,
+  ghc-bignum installed,
+  ghc-boot installed,
+  ghc-boot-th installed,
+  ghc-prim installed,
+  integer-gmp installed,
+  mtl installed,
+  os-string installed,
+  rts installed,
+  stm installed,
+  template-haskell installed,
+  text installed,
+  time installed,
+  transformers installed,
+  unix installed

@@ -11,9 +11,9 @@ import qualified Network.DNS as DNS
 import Dane.Scanner.Opts
 
 data ScannerSt = ScannerSt
-    { scannerOpts    :: ! Opts
-    , scannerDnsSeed :: ! DNS.ResolvSeed
-    , scannerOK      :: ! Bool
+    { scannerOpts    :: !Opts
+    , scannerDnsSeed :: !DNS.ResolvSeed
+    , scannerOK      :: !Bool
     }
 
 type Scanner = ST.StateT ScannerSt IO

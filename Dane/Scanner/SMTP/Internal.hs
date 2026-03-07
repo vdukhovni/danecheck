@@ -31,16 +31,16 @@ import qualified Network.TLS as TLS
 import           Dane.Scanner.SMTP.Certs (ChainInfo)
 
 data ProtoState = ProtoState
-  { smtpState   :: ! SmtpState
-  , smtpErr     :: ! SmtpErr
-  , clientName  :: ! ByteString
-  , serverName  :: ! String
-  , smtpConn    :: ! SmtpConn
-  , smtpTimeout :: ! Int
-  , llenLimit   :: ! Int
-  , ioDeadline  :: ! Sys.TimeSpec
-  , features    :: ! [SmtpFeature]
-  , chainRef    :: ! (IORef ChainInfo)
+  { smtpState   :: !SmtpState
+  , smtpErr     :: !SmtpErr
+  , clientName  :: !ByteString
+  , serverName  :: !String
+  , smtpConn    :: !SmtpConn
+  , smtpTimeout :: !Int
+  , llenLimit   :: !Int
+  , ioDeadline  :: !Sys.TimeSpec
+  , features    :: ![SmtpFeature]
+  , chainRef    :: !(IORef ChainInfo)
   }
 
 type SmtpM = StateT ProtoState IO
@@ -63,9 +63,9 @@ data SmtpState = CONNECT
   deriving (Eq, Enum, Show, Ord)
 
 data SmtpReply = SmtpReply
-  { replyCode :: ! Int
-  , replyCont :: ! Bool
-  , replyText :: ! ByteString
+  { replyCode :: !Int
+  , replyCont :: !Bool
+  , replyText :: !ByteString
   }
   deriving (Show)
 

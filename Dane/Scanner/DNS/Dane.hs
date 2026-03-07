@@ -4,14 +4,16 @@
 
 module Dane.Scanner.DNS.Dane (daneCheck) where
 
+import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Lazy as LB
+import qualified Data.ByteString.Builder as LB
+import qualified Data.ByteString.Builder.Extra as LB
+import qualified Data.Text.Encoding as T
+import qualified Network.DNS as DNS
 import           Control.Monad (when)
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Trans.State.Strict (gets)
-
-import qualified Data.ByteString.Char8 as BC
 import           Data.List (nub, sortOn)
-
-import qualified Network.DNS as DNS
 import           Network.DNS
                    ( Domain
                    , RCODE(NoErr, NameErr)
@@ -186,10 +188,8 @@ chaseMX _             _     qname owner     mxs        =
 -- | For all other domains check DS, DNSKEY, MX, A, AAAA and TLSA records as
 -- appropriate.
 --
-checkDomain :: String -> Scanner Bool
-checkDomain domain =
-    let q = BC.pack domain <> BC.pack "."
-    in go q [DS, DNSKEY, MX]
+checkDomain :: BC.ByteString -> Scanner Bool
+checkDomain domain = go domain [DS, DNSKEY, MX]
   where
 
     -- | MX is assumed last and recurses as needed for the per-host records.
@@ -222,10 +222,8 @@ checkDomain domain =
 
 -- | For the root and TLDs, check a fixed list of types
 --
-checkTld :: String -> [TYPE] -> Scanner Bool
-checkTld domain types =
-    let tld = BC.pack domain <> BC.pack "."
-    in go tld types
+checkTld :: BC.ByteString -> [TYPE] -> Scanner Bool
+checkTld tld types = go tld types
   where
 
     -- | Try each lookup in turn stopping at the first failed, insecure or
@@ -247,13 +245,14 @@ checkTld domain types =
 -- For sub-domains attempt to verify MX host DANE TLSA.
 --
 check :: String -> Scanner Bool
-check domain = do
-  case toascii domain of
-    Just "."               -> checkTld "" [DNSKEY, SOA]
-    Just a | '.' `elem` a  -> checkDomain a
-           | otherwise     -> checkTld a [DS, DNSKEY, SOA]
-    _                      -> invalid
+check domain = case toascii domain of
+    Right ls | [] <- drop 1 ls -> checkTld (toDomain ls) [DS, DNSKEY, SOA]
+             | otherwise       -> checkDomain (toDomain ls)
+    _                          -> invalid
   where
+    toDomain [] = BC.singleton '.'
+    toDomain ls = build $ mconcat $ map (\t -> T.encodeUtf8Builder t <> LB.char8 '.') ls
+    build b = LB.toStrict $ LB.toLazyByteStringWith (LB.safeStrategy 32 64) (LB.empty) b
     invalid = do
         liftIO $ putStrLn $ domain ++ " IN MX ? ; Invalid AD=0"
         return False
