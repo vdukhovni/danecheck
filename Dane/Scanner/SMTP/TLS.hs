@@ -13,6 +13,7 @@ module Dane.Scanner.SMTP.TLS
 
 import           System.Timeout.Lifted (timeout)
 
+import           Control.Applicative ((<|>))
 import           Control.Exception.Safe (Handler(..), catches, toException)
 import           Control.Monad.Base (liftBase)
 import           Control.Monad.Trans.Class (lift)
@@ -22,12 +23,14 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as LB
 import           Data.Conduit (ConduitT, Void, await, yield)
 import           Data.Default.Class
+import           Data.Function ((&))
 import           Data.IORef (IORef)
+import qualified Data.List as L
 import           Data.Maybe (isJust)
 import qualified Data.X509.Validation as X509
 import qualified Data.X509.CertificateStore as X509
 import           Network.Socket (Socket)
-import           Network.TLS (Version(TLS10, TLS11, TLS12, TLS13))
+import           Network.TLS (Version(TLS12, TLS13))
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra as TLS
 
@@ -52,6 +55,7 @@ tlsParams host cref store =
           { TLS.onCertificateRequest = \ _ -> return Nothing
           , TLS.onServerCertificate  = genChainInfo cref
           , TLS.onSuggestALPN        = return Nothing
+          , TLS.onSelectKeyShareGroups = chooseKS
           }
       , TLS.clientShared    = def
           { TLS.sharedCAStore            = store
@@ -59,18 +63,59 @@ tlsParams host cref store =
           , TLS.sharedValidationCache    = nullCache
           , TLS.sharedSessionManager     = TLS.noSessionManager
           }
-      , TLS.clientSupported = def
-          { TLS.supportedCiphers = TLS.ciphersuite_strong
-          , TLS.supportedVersions = [TLS13, TLS12, TLS11, TLS10]
+      , TLS.clientSupported = def & \ d -> d
+          { TLS.supportedCiphers = chooseCS
+          , TLS.supportedVersions = [TLS13, TLS12]
           , TLS.supportedCompressions = [TLS.nullCompression]
           , TLS.supportedSecureRenegotiation = True
           , TLS.supportedSession = False
           , TLS.supportedFallbackScsv = False
           , TLS.supportedEmptyPacket = True
+          , TLS.supportedGroups = chooseGS (TLS.supportedGroups d)
           }
       , TLS.clientWantSessionResume = Nothing    -- no session to resume
       , TLS.clientDebug = def                    -- Can override DRBG seed
+      , TLS.clientWantTicket = False
       }
+  where
+    -- Add some DHE TLS 1.2 ciphers, with the AES128 choice first
+    chooseCS :: [TLS.Cipher]
+    chooseCS =
+        TLS.ciphersuite_strong ++
+        case L.uncons $ reverse TLS.ciphersuite_dhe_rsa of
+            Just (l, cs) -> l : reverse cs
+            Nothing       -> []
+    chooseGS :: [TLS.Group] -> [TLS.Group]
+    chooseGS = go False
+      where
+        go _ [] = []
+        go dheSeen (g@(TLS.Group n) : gs)
+            -- No P521 or SecP384r1MLKEM1024
+            | n == 25 || n == 4589 = go dheSeen gs
+            -- All other EC curves
+            | n < 256
+            = g : go dheSeen gs
+            -- Replace FFDHE list with just ffdhe2048 and ffdhe3072
+            | n >= 256 && n < 512
+            = if dheSeen
+              then go dheSeen gs
+              else TLS.FFDHE2048 : TLS.FFDHE3072 : go True gs
+            | otherwise
+            = g : go dheSeen gs
+
+    chooseKS :: [TLS.Group] -> [TLS.Group]
+    chooseKS = go Nothing Nothing
+      where
+        go g2 g3 (g@(TLS.Group n) : gs)
+            -- EC, if possible
+            | n < 256   = [g]
+            -- else FFDHE, if possible
+            | n < 512   = go (g2 <|> Just g) g3 gs
+            -- else anything goes
+            | otherwise = go g2 (g3 <|> Just g) gs
+        go (Just g) _ _ = [g]
+        go _ (Just g) _ = [g]
+        go _ _ _        = []
 
 tlsSource :: ConduitT () ByteString SmtpM ()
 tlsSource = do

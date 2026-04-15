@@ -1,13 +1,6 @@
 packages: .
 
-allow-newer:
-    base,
-    binary,
-    containers,
-    time
-
 constraints:
-  mlkem +use_crypton,
   base installed,
   array installed,
   binary installed,
