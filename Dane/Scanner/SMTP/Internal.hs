@@ -13,6 +13,7 @@ module Dane.Scanner.SMTP.Internal
   , eofErr
   , timeErr
   , errLoc
+  , tryIO
   ) where
 
 import qualified System.Clock as Sys
@@ -20,7 +21,7 @@ import           System.IO.Error as Sys
 
 import           GHC.IO.Exception (IOErrorType(EOF, TimeExpired))
 
-import           Control.Exception (SomeException, IOException)
+import           Control.Exception (SomeException, IOException, try)
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Trans.State.Strict (StateT, gets)
 import           Data.ByteString.Char8 (ByteString, pack)
@@ -28,6 +29,8 @@ import           Data.IORef (IORef, newIORef)
 import           Data.Int (Int64)
 import           Network.Socket (Socket)
 import qualified Network.TLS as TLS
+
+import           Dane.Scanner.Opts (SigAlgs)
 import           Dane.Scanner.SMTP.Certs (ChainInfo)
 
 data ProtoState = ProtoState
@@ -41,6 +44,7 @@ data ProtoState = ProtoState
   , ioDeadline  :: !Sys.TimeSpec
   , features    :: ![SmtpFeature]
   , chainRef    :: !(IORef ChainInfo)
+  , tlsSigAlgs  :: !SigAlgs    -- ^ TLS signature-algorithm preference
   }
 
 type SmtpM = StateT ProtoState IO
@@ -94,13 +98,14 @@ timeLeft = do
 
 -- | Initialize the client SMTP protocol state
 --
-startState :: String     -- ^ SMTP client EHLO name
+startState :: SigAlgs    -- ^ TLS signature-algorithm preference
+           -> String     -- ^ SMTP client EHLO name
            -> String     -- ^ SMTP server name
            -> Int        -- ^ SMTP command timeout (us)
            -> Int        -- ^ SMTP response line length limit
            -> Socket     -- ^ Socket connected to the SMTP server
            -> IO ProtoState
-startState helo peer tout llen sock = do
+startState sigAlgs helo peer tout llen sock = do
   cref <- newIORef undefined
   deadline <- timeLimit tout
   return ProtoState
@@ -114,6 +119,7 @@ startState helo peer tout llen sock = do
     , llenLimit  = llen
     , features   = []
     , chainRef   = cref
+    , tlsSigAlgs = sigAlgs
     }
 
 ioErr :: String -> IOException -> IOException
@@ -134,3 +140,12 @@ errLoc err st =
     showChar ' '.
     showString loc $ ""
   else Sys.ioeSetLocation err $ show $ smtpState st
+
+-- | 'Control.Exception.try' monomorphised at 'IOException', matching
+-- the @safe-exceptions@ helper of the same name.  Async exceptions
+-- (anything wrapped in 'SomeAsyncException') pass through unchanged
+-- — only @IOException@s are caught — which is what every caller
+-- here wants: the @timeout@ wrapping each call needs async
+-- @TimeExpired@ to propagate so the timeout actually fires.
+tryIO :: IO a -> IO (Either IOException a)
+tryIO = try

@@ -1,40 +1,74 @@
 cabal-version: 3.12
 
 Name:                danecheck
-Version:             1.2.0
-Synopsis:            DANE SMTP checker
-Description:         Check DANE TLSA security of an email domain
+Version:             1.0.0.0
+Synopsis:            DANE SMTP validator
+Description:
+    @danecheck@ is a diagnostic tool that verifies the
+    DANE TLSA security (RFC 7672) of an email domain's SMTP
+    delivery path.  For the given domain it follows the MX
+    records, looks up A\/AAAA addresses for each MX host,
+    queries TLSA records at @_25._tcp.\<mx\>@ (with the
+    RFC 7672 CNAME extension to a TLSA base name), connects
+    on port 25, performs STARTTLS, and reports whether each
+    peer's certificate chain matches the TLSA RRset.
+    .
+    Output is streamed in BIND-style record form with
+    per-IP diagnostics: the DNS chain for each lookup, the
+    negotiated TLS version, cipher and key-exchange group,
+    the presented peer names, and a depth-by-depth view
+    of the certificate chain with TLSA match\/mismatch
+    annotations.  The process exit code reflects whether
+    the domain validated cleanly.
+    .
+    See the @README.md@ for usage examples and command-line
+    options.
+
 License:             BSD-3-Clause
 License-File:        LICENSE
 Author:              Viktor Dukhovni (with contributions from Peter Duchovni)
 Maintainer:          postfix-users@dukhovni.org
-Category:            Commands
+Category:            Network
+Homepage:            https://github.com/vdukhovni/danecheck
+Bug-Reports:         https://github.com/vdukhovni/danecheck/issues
 Build-Type:          Simple
-tested-with: GHC == 9.6.4
-           , GHC == 9.8.1
-           , GHC == 9.10.3
-           , GHC == 9.12.2
+Extra-Doc-Files:     README.md
+tested-with: GHC == 9.10.3
+           , GHC == 9.12.4
            , GHC == 9.14.1
+
+Source-Repository head
+  Type:     git
+  Location: https://github.com/vdukhovni/danecheck.git
 
 Executable danecheck
   HS-Source-Dirs: "."
-  Default-Language: Haskell2010
-  GHC-Options: -Wall -O
+  Default-Language: GHC2024
+  GHC-Options: -Wall
   Main-Is: Dane/Scanner/Main.hs
+
+  Default-Extensions:
+    BlockArguments
+    MultiWayIf
+    NegativeLiterals
+    PatternSynonyms
+    StrictData
+    ViewPatterns
 
   Other-Extensions:
     FlexibleContexts
     OverloadedStrings
-    PatternSynonyms
     RecordWildCards
-    ViewPatterns
+    RequiredTypeArguments
+    TemplateHaskell
 
   Other-Modules:
+    Dane.Scanner.Source
     Dane.Scanner.State
     Dane.Scanner.Util
     Dane.Scanner.DNS.Dane
     Dane.Scanner.DNS.Lookup
-    Dane.Scanner.DNS.Response
+    Dane.Scanner.DNS.Reply
     Dane.Scanner.DNS.Toascii
     Dane.Scanner.Opts
     Dane.Scanner.SMTP.Addr
@@ -47,13 +81,10 @@ Executable danecheck
     Dane.Scanner.SMTP.TLS
 
   Build-Depends:
-    attoparsec < 0.15,
-    base >= 4.9 && < 5,
-    base16-bytestring >=1.0 && < 1.1,
+    attoparsec >= 0.14.4 && < 0.15,
+    base >= 4.20 && < 5,
     bytestring >= 0.10 && < 0.13,
     clock >= 0.8 && < 0.9,
-    conduit >=1.2 && < 1.4,
-    conduit-combinators >= 1.2 && < 1.4,
     containers >= 0.6 && < 0.9,
     crypton >=1.0 && <1.2,
     crypton-asn1-encoding >=0.9 && <0.11,
@@ -62,21 +93,18 @@ Executable danecheck
     crypton-x509-store >=1.7 && <1.10,
     crypton-x509-validation >=1.7 && <1.10,
     data-default-class >= 0.1 && < 0.3,
-    dns >= 4.0 && < 4.3,
+    dnsbase ^>= 1.0.2,
     hostname ^>= 1.0,
-    idn ^>= 0.1,
+    idna2008 ^>= 1.0,
     iproute >= 1.6 && < 1.8,
-    lifted-base >= 0.1 && < 0.3,
-    monad-control ^>= 1.0,
     network >= 3.0 && < 3.3,
     optparse-applicative >= 0.14 && < 0.20,
-    ram >=0.19 && < 0.23,
-    safe-exceptions ^>= 0.1,
-    stm >= 2.0 && < 2.6,
+    ram >=0.19 && <0.23,
+    streaming ^>= 0.2,
+    streaming-bytestring >=0.2 && <0.4,
     text >= 1.2 && < 2.2,
     time-hourglass >= 0.2 && < 0.4,
-    tls ^>= 2.4.1,
+    tls ^>= 2.4.3,
     transformers >= 0.5 && < 0.7,
-    transformers-base >= 0.3 && < 0.5,
     unix >= 2.7 && < 2.9,
-    unix-time >= 0.3 && < 0.5
+    unix-time >= 0.3 && < 0.6

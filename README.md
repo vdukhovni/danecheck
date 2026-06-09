@@ -5,64 +5,53 @@
 - Test the local resolver configuration by verifying the validity of
   the root zone DNSKEY and SOA RRSets.
 
-- Test whether DNSSEC is enabled for a given TLD.
+- Test the DNSSEC delegation chain of a given TLD (DS, DNSKEY and
+  SOA), or just DNSKEY and SOA when checking the root zone itself.
 
 - Check whether an email domain is fully protected (across all of
   its MX hosts) by DANE TLSA records, and whether these match the
   actual certificate chains seen at each IP address of each MX host.
 
 - Perform certificate chain verification at a time offset from the
-  current time to ensure that that certificates are not about to
-  expire too soon.
+  current time to ensure that certificates are not about to expire
+  too soon.
 
 A non-zero exit status is returned if any DNS lookups fail or if the
 MX records or MX hosts are in an unsigned zone, or if for one of the
 MX hosts no associated secure TLSA records are found.  A non-zero exit
-status is also returned if any of the SMTP connections fail to establish
-a TLS connection or yield a certificate chain that does not match the
-TLSA records.
+status is also returned if any of the attempted SMTP connections fail
+to complete a TLS handshake whose certificate chain matches the TLSA
+records.
 
-Note that `danecheck` prefers ECDSA to RSA, and only makes one
-connection to each IP address, so for hosts that have both ECDSA and RSA
-certificates, only the ECDSA certificate will be checked.  Such hosts
-are rare, and when their TLSA records are only correct for one of RSA
-and ECDSA, it is almost always RSA that is properly configured and ECDSA
-that is neglected.  So, for now, testing ECDSA in preference to RSA is
-typically a feature, not a bug.
+By default `danecheck` makes one TLS connection per IP and offers
+the TLS library's full default set of signature algorithms, letting
+the server pick.  Hosts that publish both ECDSA and RSA certificates
+are uncommon, and when only one is correctly bound to a TLSA record
+it is almost always RSA — so testing whichever cert the server
+prioritises is usually sufficient.
+
+Where both certificate kinds are in use and you want to probe them
+independently, the `--sigalgs` option restricts (and orders) the
+signature-algorithm groups offered to the server.  The argument is
+a comma-separated, case-insensitive list of named groups drawn from
+`rsa`, `ecdsa` and `eddsa`:
+
+* `--sigalgs ecdsa` &nbsp; offer only ECDSA (P-256\/P-384\/P-521 with
+  SHA-2)
+* `--sigalgs rsa` &nbsp;&nbsp;&nbsp; offer only RSA (RSA-PSS for TLS 1.3,
+  RSA-PKCS#1 for TLS 1.2)
+* `--sigalgs eddsa` &nbsp; offer only Ed25519 and Ed448
+* `--sigalgs ecdsa,rsa` &nbsp;&nbsp; offer ECDSA first, fall back to RSA
+* `--sigalgs any` (or omit the option) &nbsp; the TLS library default
+
+Servers that don't support any of the offered algorithms will fail
+the TLS handshake, which is the intended diagnostic — it confirms
+that the requested cert kind isn't available at that peer.
 
 ## Synopsis
 
-The `danecheck` command options are as below.
-
-    $ danecheck --help
-    danecheck - check for and validate SMTP TLSA records
-
-    Usage: danecheck [-N | (-n|--nameserver ADDRESS)] [-t|--timeout TIMEOUT] 
-                     [-r|--tries NUMTRIES] [-u|--udpsize SIZE] [-H|--helo HELO] 
-                     [-s|--smtptimeout TIMEOUT] [-l|--linelimit LENGTH] 
-                     [-R|--reserved] [-D|--down HOSTNAME] [-U|--down-only] 
-                     [-4|--noipv4] [-6|--noipv6] [-A|--all] [-d|--days DAYS] 
-                     [-e|--eechecks] [DOMAIN]
-
-    Available options:
-      -h,--help                Show this help text
-      -N                       Use /etc/resolv.conf nameserver list
-      -n,--nameserver ADDRESS  Use nameserver at ADDRESS (default: "127.0.0.1")
-      -t,--timeout TIMEOUT     DNS request TIMEOUT (default: 3000 ms)
-      -r,--tries NUMTRIES      at most NUMTRIES requests per lookup (default: 6)
-      -u,--udpsize SIZE        set EDNS UDP buffer SIZE (default: 1216)
-      -H,--helo HELO           send specified client HELO name
-      -s,--smtptimeout TIMEOUT SMTP TIMEOUT (default: 30000 ms)
-      -l,--linelimit LENGTH    Maximum server SMTP response LENGTH (default: 4096)
-      -R,--reserved            connect to reserved IP addresses
-      -D,--down HOSTNAME       Specify one or more HOSTNAMEs that are down
-      -U,--down-only           Limit connections to just the '-D' option hosts
-      -4,--noipv4              disable SMTP via IPv4
-      -6,--noipv6              disable SMTP via IPv6
-      -A,--all                 scan all MX hosts, not just those with TLSA RRs
-      -d,--days DAYS           check validity at DAYS in the future
-      -e,--eechecks            check end-entity (leaf) certificate dates and names
-      DOMAIN                   check the specified DOMAIN (default: ".")
+For an overview of the `danecheck` command-line interface, run
+`danecheck --help`.
 
 When scanning the root domain, what's checked is secure retrieval
 of the root DNSKEY and SOA RRSets.  Similarly, when scanning a
@@ -72,19 +61,22 @@ records and TLSA records are retrieved and must be DNSSEC signed.
 
 Each MX host is expected to have TLSA records, an SMTP connection
 is made to each address of each such MX host (with the '-A' option
-connections are made to all MX hosts). A TLS handshake is performed
-to retrieve the hosts's certificate chain which is verified against
-the DNS TLSA RRs If anything is unavailable, insecure or wrong, a
-non-zero exit code is returned.
+connections are also made to MX hosts that don't have DNSSEC-signd
+TLSA records).  A TLS handshake is performed to retrieve the
+host's certificate chain, which is verified against the DNS TLSA
+RRs.  If anything is unavailable, insecure or wrong, a non-zero
+exit code is returned.
 
-The '-D' option can be used multiple times to skip SMTP connections
-to MX hosts that are expected to be down. The '-U' option inverts
-the action of the '-D' option, and connects to only those MX hosts
-that are specified via the '-D' option (none if no such hosts are
-specified).
+The '-D' option can be used zero or more  times to skip SMTP
+connections to MX hosts that are expected to be down. The '-U'
+option inverts the action of the '-D' option, and connects to only
+those MX hosts that are specified via the '-D' option (none if no
+such hosts are specified).
 
-Reserved addresses include the address blocks from the IANA IPv4 and
-IPv6 special purpose address registries:
+Some "reserved" MX host addresses are assumed invalid and not tested by
+default.  The command will report a non-zero exit status when these are
+encountered.  The reserved addresses are the address blocks from the IANA
+IPv4 and IPv6 special purpose address registries:
 
 * [IPv4 Special-Purpose Address Registry](https://www.iana.org/assignments/iana-ipv4-special-registry)
 * [IPv6 Special-Purpose Address Registry](https://www.iana.org/assignments/iana-ipv6-special-registry)
@@ -97,150 +89,186 @@ reserved addresses.
 
 ## Building the software
 
-### Prerequisite:  A working GHC + Stack toolchain.
+### Prerequisite: A working GHC toolchain
 
-Haskell and stack can be downloaded from the [Haskell platform](https://www.haskell.org/platform/)
-website, and are also available as packages for various operating systems.
+`danecheck` is written in Haskell and depends only on libraries
+available from [Hackage](https://hackage.haskell.org/); no external
+C libraries are required.
 
-- Older versions of `stack` can be used to install a more current
-  version, which typically installs into `~/.local/bin`.
+`danecheck` is tested against GHC 9.10.3, 9.12.4 and 9.14.1; any of
+these will work.  Use whichever your system already provides, or the
+most recent one if you're starting fresh.
 
-      $ stack upgrade
-      $ stack update
+Some systems have packages for one or more of the supported
+compiler versions.  For example:
 
-### Development libraries and headers
+  - Fedora 43 has `ghc9.10-devel` and `ghc9.12-devel` meta packages
+    that can obviate the need for "ghcup", or make it possible to
+    build "ghcup" from source.
 
-Some of the Haskell packages required for `danecheck` depend on
-optional C-libraries that may require the installation of additional
-OS packages.  Below is a partial list of known optional dependencies
-absent on some systems.  There are likely more on some systems.
+  - For MacOS `ghcup`, `ghc@9.10` and `ghc@9.12` are available via
+    `homebrew`.
 
-* libicu for Unicode to ASCII conversion of domain names
+Alternatively, you can install the Haskell toolchain via
+[`ghcup`](https://www.haskell.org/ghcup/).  Once `ghcup` is
+[installed](https://www.haskell.org/ghcup/install/),
+fetch GHC and `cabal-install`:
 
-### Clone the danecheck Git repository and submodules
+    $ ghcup install ghc 9.12.4
+    $ ghcup set     ghc 9.12.4
+    $ ghcup install cabal recommended
 
-The `danecheck` repository uses submodules for some of its dependencies,
-the `--recursive` option to `git clone` will automatically clone the
-submodules.
+**Disk space note**: each GHC toolchain installed by `ghcup` is
+substantial — a single GHC takes roughly **2.2–3.0 GB** under
+`~/.ghcup/ghc/<version>/`.  By comparison the cabal package store
+for `danecheck` and its transitive dependencies is around **470 MB**
+under `~/.cabal/store/<ghc-version>-<hash>/`.  Plan for around 3 GB
+of free space for a fresh single-GHC setup, more if you install
+multiple GHC versions.  Old GHC versions can be removed via `ghcup
+rm ghc <version>` when no longer needed.
 
-    $ git clone --recursive https://github.com/vdukhovni/danecheck
-    $ cd danecheck
+**GHC 9.14.1 dependency bounds**: a couple of `danecheck`'s
+transitive dependencies have not yet relaxed their upper bounds to
+admit the `base`, `containers` and `time` versions shipped with GHC
+9.14.1.  Two install scenarios behave differently:
+
+* **Building from a source checkout** (e.g. after `git clone`):
+  the `cabal.project` shipped in this repository already carries
+  the necessary `allow-newer: base, containers, time` stanza, and
+  Cabal applies it automatically.  Nothing to do.
+* **Installing from Hackage with `cabal install danecheck`**:
+  Cabal does *not* consult the package's own `cabal.project`
+  during a Hackage install.  Pass the override on the command line
+  yourself:
+
+        $ cabal install danecheck --allow-newer=base,containers,time
+
+  or add the same line to your own `cabal.project` / cabal config.
+
+GHC 9.10.3 and 9.12.4 build `danecheck` in either scenario without any
+workaround.
 
 ### Compile and install danecheck
 
-Using a sufficiently recent version of `stack`, in the top-level directory
-of the cloned project run
+From the top of the source tree:
 
-    $ stack install
+    $ cabal update
+    $ cabal build danecheck
+    $ exe=$(cabal -v0 list-bin danecheck)
+    $ strip "$exe"
+    $ install "$exe" ~/.local/bin    # or any directory on your PATH
 
-which will compile and install a copy of the `danecheck` executable in
-Stack's default installation directory (typically ~/.local/bin).
+For a self-contained install from Hackage (no source checkout
+required), `cabal install danecheck` will fetch the released version
+and place the binary under the path configured by `cabal`'s
+`installdir` setting (typically `~/.cabal/bin`).
 
 ## Getting Started
 
 ### Choose a working DNSSEC-validating resolver
 
-It is assumed by default that your system has a working DNSSEC-validating
-resolver (BIND 9, unbound or similar) running locally and listening on
-the loopback interface at UDP and TCP at 127.0.0.1:53.
+It is assumed that your system has a working DNSSEC-validating
+resolver (BIND 9, unbound or similar) running locally and
+listening on the loopback interface at UDP and TCP at
+127.0.0.1:53.
 
 By default the system's `/etc/resolv.conf` file is ignored and the
 default nameserver list consists of just "127.0.0.1".  If you want
 to specify a different validating resolver, use the `-n` option to
-select an alternate IP address.  The /etc/resol.conf nameserver list
-can be selected via the "-N" option.
+select an alternate IP address.  The `/etc/resolv.conf` nameserver
+list can be selected via the `-N` option.
 
 ### Check that the software and resolver are working
 
 Assuming the installation directory is ~/.local/bin:
 
     $ PATH=$HOME/.local/bin:$PATH
-    $ danecheck || printf "ERROR: root zone record validation failed" >&2
+    $ danecheck || printf "ERROR: root zone record validation failed\n" >&2
 
-This should output a validated copy of the root zone DNSKEY and SOA
-RRSets and not print the ERROR message.  For example (key base64
-data abbreviated):
+This should output a validated copy of the root zone SOA RR and
+not print the ERROR message.  For example:
 
     $ danecheck
-    . IN DNSKEY 256 3 8 AwEAAbPwrxwt...I5QymeSkJJzc= ; AD=1 NoError
-    . IN DNSKEY 257 3 8 AwEAAaz/tAm8...NR1AkUTV74bU= ; AD=1 NoError
-    . IN SOA a.root-servers.net. nstld@verisign-grs.com. 2019101700 1800 900 604800 86400 ; AD=1 NoError
+    . IN SOA a.root-servers.net. nstld@verisign-grs.com. 2026060900 1800 900 604800 86400 ; NoError AD=1
 
-The ` ; AD=1 NoError` DNS comments appended to each output line indicates
-that the resolver obtained a DNSSEC validated result.  The `.` between the
-first and second DNS labels of the SOA contact mailbox field is displayed
-as an `@` sign, since some domains have literal `.` characters in the
-localpart (first label) of the address.  However, at present, the trailing
-`.` is not presently stripped from the domain part of the address.
+The trailing `; NoError AD=1` comment on each output line indicates
+the rcode and DNSSEC AD bit of the response.  A validated answer
+shows `NoError AD=1`; failures or insecure answers (`AD=0`) are
+diagnosed in place.
+
+Validated DS and DNSKEY records are not printed: their successful
+retrieval is implicit in the SOA line being secure and present.
+Only failing or insecure lookups along the validation chain produce
+diagnostic output, so the steady-state success case is intentionally
+brief.
+
+The `.` between the first and second DNS labels of the SOA contact
+mailbox field is displayed as an `@` sign, since some domains have
+literal `.` characters in the localpart (first label) of the
+address.  The trailing `.` is not stripped from the domain part of
+the address.
 
 ### Check your TLD
 
-If your domain's ancestor TLD is not DNSSEC signed (still the case for
-some ccTLD domains), then DNSSEC will not be used for your domain either,
-except from resolvers that have configured a custom trust-anchor for
-your domain or one if its ancestor domains.  When checking the DNSSEC
-status of a TLD `danecheck` outputs its DS, DNSKEY and SOA RRsets.
-For example:
+If your domain's ancestor TLD is not DNSSEC signed (still the case
+for some ccTLD domains), then DNSSEC will not be used for your
+domain either, except from resolvers that have configured a custom
+trust-anchor for your domain or one of its ancestor domains.  When
+checking the DNSSEC status of a TLD `danecheck` walks the DS,
+DNSKEY and SOA records.  As with the root, validated DS and DNSKEY
+records are not printed; only the SOA confirmation appears in the
+success case:
 
     $ danecheck org
-    org. IN DS 9795 7 1 364dfab3daf254cab477b5675b10766ddaa24982 ; AD=1 NoError
-    org. IN DS 9795 7 2 3922b31b6f3a4ea92b19eb7b52120f031fd8e05ff0b03bafcf9f891bfe7ff8e5 ; AD=1 NoError
-    org. IN DNSKEY 256 3 7 AwEAAb7ojfnp...nL5k7Y/VeZRpR ; AD=1 NoError
-    org. IN DNSKEY 256 3 7 AwEAAdEExfqc...9U9q91zgJ9bkn ; AD=1 NoError
-    org. IN DNSKEY 257 3 7 AwEAAZTjbIO5...r8ti6MNoJEHU= ; AD=1 NoError
-    org. IN DNSKEY 257 3 7 AwEAAcMnWBKL...nwXCNDXk0kk0= ; AD=1 NoError
-    org. IN SOA a0.org.afilias-nst.info. noc@afilias-nst.info. 2013668330 1800 900 604800 86400 ; AD=1 NoError
+    org. IN SOA a0.org.afilias-nst.info. hostmaster.donuts.email. 1781006459 7200 900 1209600 3600 ; NoError AD=1
 
 ## Checking your own domain
 
 With your resolver tested for working root zone security and DNSSEC working for
 your TLD, you can proceed to regularly test your own domain.  Example:
 
-    $ domain=openssl.org
-    $ danecheck "$domain" || printf "ERROR: DANE security check failed for: %s\n" "$domain"
-    openssl.org. IN DS 44671 8 2 30abf6c1b7de947ddf1c1b01206c126685e5eda880bf9dc8815eae7c474f83f9 ; AD=1 NoError
-    openssl.org. IN DNSKEY 256 3 8 AwEAAaJsnu//...v0lJQkbhta8V7 ; AD=1 NoError
-    openssl.org. IN DNSKEY 257 3 8 AwEAAbxptd2o...XBUsIsxlbmYs= ; AD=1 NoError
-    openssl.org. IN MX 50 mta.openssl.org. ; AD=1 NoError
-    mta.openssl.org. IN A 194.97.150.230 ; AD=1 NoError
-    mta.openssl.org. IN AAAA 2001:608:c00:180::1:e6 ; AD=1 NoError
-    _25._tcp.mta.openssl.org. IN TLSA 3 1 1 6cf12d78fbf242909d01b96ab5590812954058dc32f8415f048fff064291921e ; AD=1 NoError
-      mta.openssl.org[194.97.150.230]: pass: TLSA match: depth = 0, name = mta.openssl.org
-        TLS = TLS12 with ECDHE-RSA-AES256GCM-SHA384,P256
-        name = mta.openssl.org
+    $ domain=ietf.org
+    $ danecheck ietf.org
+    ietf.org. IN MX 0 mail2.ietf.org. ; NoError AD=1
+    mail2.ietf.org. IN A 166.84.6.31 ; NoError AD=1
+    mail2.ietf.org. IN AAAA 2602:f977:800:f7f6::1 ; NoError AD=1
+    _25._tcp.mail2.ietf.org. IN TLSA 3 1 1 810e86ff280553ec895b7f35132a3e919f9aa0517b181645492cd56c8bc2e67a ; NoError AD=1
+      mail2.ietf.org[166.84.6.31]: pass: TLSA match: depth = 0, name = *.ietf.org
+        TLS = TLS1.3 with TLS_CHACHA20_POLY1305_SHA256,X25519,PubKeyALG_EC
+        name = *.ietf.org
         depth = 0
-          Issuer CommonName = Let's Encrypt Authority X3
+          Issuer CommonName = E8
           Issuer Organization = Let's Encrypt
-          notBefore = 2019-08-26T11:00:16Z
-          notAfter = 2019-11-24T11:00:16Z
-          Subject CommonName = mta.openssl.org
-          pkey sha256 [matched] <- 3 1 1 6cf12d78fbf242909d01b96ab5590812954058dc32f8415f048fff064291921e
+          notBefore = 2026-04-17T08:18:28Z
+          notAfter = 2026-07-16T08:18:27Z
+          Subject CommonName = *.ietf.org
+          pkey sha256 [matched] <- 3 1 1 810e86ff280553ec895b7f35132a3e919f9aa0517b181645492cd56c8bc2e67a
         depth = 1
-          Issuer CommonName = DST Root CA X3
-          Issuer Organization = Digital Signature Trust Co.
-          notBefore = 2016-03-17T16:40:46Z
-          notAfter = 2021-03-17T16:40:46Z
-          Subject CommonName = Let's Encrypt Authority X3
+          Issuer CommonName = ISRG Root X1
+          Issuer Organization = Internet Security Research Group
+          notBefore = 2024-03-13T00:00:00Z
+          notAfter = 2027-03-12T23:59:59Z
+          Subject CommonName = E8
           Subject Organization = Let's Encrypt
-          pkey sha256 [nomatch] <- 2 1 1 60b87575447dcba2a36b7d11ac09fb24a9db406fee12d2cc90180517616e8a18
-      mta.openssl.org[2001:608:c00:180::1:e6]: pass: TLSA match: depth = 0, name = mta.openssl.org
-        TLS = TLS12 with ECDHE-RSA-AES256GCM-SHA384,P256
-        name = mta.openssl.org
+          pkey sha256 [nomatch] <- 2 1 1 885bf0572252c6741dc9a52f5044487fef2a93b811cdedfad7624cc283b7cdd5
+      mail2.ietf.org[2602:f977:800:f7f6::1]: pass: TLSA match: depth = 0, name = *.ietf.org
+        TLS = TLS1.3 with TLS_CHACHA20_POLY1305_SHA256,X25519,PubKeyALG_EC
+        name = *.ietf.org
         depth = 0
-          Issuer CommonName = Let's Encrypt Authority X3
+          Issuer CommonName = E8
           Issuer Organization = Let's Encrypt
-          notBefore = 2019-08-26T11:00:16Z
-          notAfter = 2019-11-24T11:00:16Z
-          Subject CommonName = mta.openssl.org
-          pkey sha256 [matched] <- 3 1 1 6cf12d78fbf242909d01b96ab5590812954058dc32f8415f048fff064291921e
+          notBefore = 2026-04-17T08:18:28Z
+          notAfter = 2026-07-16T08:18:27Z
+          Subject CommonName = *.ietf.org
+          pkey sha256 [matched] <- 3 1 1 810e86ff280553ec895b7f35132a3e919f9aa0517b181645492cd56c8bc2e67a
         depth = 1
-          Issuer CommonName = DST Root CA X3
-          Issuer Organization = Digital Signature Trust Co.
-          notBefore = 2016-03-17T16:40:46Z
-          notAfter = 2021-03-17T16:40:46Z
-          Subject CommonName = Let's Encrypt Authority X3
+          Issuer CommonName = ISRG Root X1
+          Issuer Organization = Internet Security Research Group
+          notBefore = 2024-03-13T00:00:00Z
+          notAfter = 2027-03-12T23:59:59Z
+          Subject CommonName = E8
           Subject Organization = Let's Encrypt
-          pkey sha256 [nomatch] <- 2 1 1 60b87575447dcba2a36b7d11ac09fb24a9db406fee12d2cc90180517616e8a18
+          pkey sha256 [nomatch] <- 2 1 1 885bf0572252c6741dc9a52f5044487fef2a93b811cdedfad7624cc283b7cdd5
 
 If the exit code indicates failure you should check the output for:
 
@@ -259,126 +287,24 @@ If the exit code indicates failure you should check the output for:
 
 ## Skipping out-of-service MX hosts
 
-If some of your MX hosts are down, and you want to verify the certificate
-chains of only the remaining hosts, you can specify the `--down` option
-one or more times to skip SMTP tests for those hosts, their DNS security
-(including presence of TLSA records) will still be tested and will be
-required for the overall check to succeed.  In the example below, the host
-`bh.nic.cz` is down and is skipped, allowing the overall check to succeed.
+If some of your MX hosts are down and you want to verify the
+certificate chains of only the remaining hosts, you can specify
+the `--down` (`-D`) option one or more times to skip SMTP tests
+for those hosts.  Their DNS security (including presence of TLSA
+records) is still tested and is still required for the overall
+check to succeed.  Use `--upside-down` (`-U`) to invert the sense
+of `-D` and probe *only* the listed hosts, leaving the rest
+unchecked.
 
-    $ danecheck --down bh.nic.cz cznic.cz; echo $?
-    cznic.cz. IN DS 61281 13 2 fac1a7f06c7c...c6d07e7d8ef7 ; AD=1 NoError
-    cznic.cz. IN DNSKEY 256 3 13 rs6oetkFuqOg...swO3BfKoLw== ; AD=1 NoError
-    cznic.cz. IN DNSKEY 257 3 13 LM4zvjUgZi2X...TrDzWmmHwQ== ; AD=1 NoError
-    cznic.cz. IN MX 10 mail.nic.cz. ; AD=1 NoError
-    cznic.cz. IN MX 15 mx.nic.cz. ; AD=1 NoError
-    cznic.cz. IN MX 20 bh.nic.cz. ; AD=1 NoError
-    mail.nic.cz. IN A 217.31.204.67 ; AD=1 NoError
-    mail.nic.cz. IN AAAA 2001:1488:800:400::400 ; AD=1 NoError
-    _25._tcp.mail.nic.cz. IN TLSA 3 1 1 4f9736249ab5...6194f5bb2e09 ; AD=1 NoError
-      mail.nic.cz[217.31.204.67]: pass: TLSA match: depth = 0, name = mail.nic.cz
-        TLS = TLS12 with ECDHE-RSA-AES256GCM-SHA384
-        name = jabber.nic.cz
-        name = lists.nic.cz
-        name = mail.nic.cz
-        name = nic.cz
-        depth = 0
-          Issuer CommonName = Let's Encrypt Authority X3
-          Issuer Organization = Let's Encrypt
-          notBefore = 2017-08-03T13:02:00Z
-          notAfter = 2017-11-01T13:02:00Z
-          Subject CommonName = mail.nic.cz
-          pkey sha256 [matched] <- 3 1 1 4f9736249ab5...6194f5bb2e09
-        depth = 1
-          Issuer CommonName = DST Root CA X3
-          Issuer Organization = Digital Signature Trust Co.
-          notBefore = 2016-03-17T16:40:46Z
-          notAfter = 2021-03-17T16:40:46Z
-          Subject CommonName = Let's Encrypt Authority X3
-          Subject Organization = Let's Encrypt
-          pkey sha256 [nomatch] <- 2 1 1 60b87575447d...0517616e8a18
-    mx.nic.cz. IN A 217.31.58.56 ; AD=1 NoError
-    mx.nic.cz. IN AAAA 2001:1ab0:7e1e:c574:7a2b:cbff:fe33:7019 ; AD=1 NoError
-    _25._tcp.mx.nic.cz. IN TLSA 3 1 1 a9205f093637...b519bf47a523 ; AD=1 NoError
-      mx.nic.cz[217.31.58.56]: pass: TLSA match: depth = 0, name = mx.nic.cz
-        TLS = TLS12 with ECDHE-RSA-AES256GCM-SHA384
-        name = mx.nic.cz
-        depth = 0
-          Issuer CommonName = CZ.NIC SHA2 Root Certification Authority
-          Issuer Organization = CZ.NIC, z.s.p.o.
-          notBefore = 2017-02-13T09:29:27Z
-          notAfter = 2019-02-13T09:29:27Z
-          Subject CommonName = mx.nic.cz
-          Subject Organization = CZ.NIC
-          pkey sha256 [matched] <- 3 1 1 a9205f093637...b519bf47a523
-        depth = 1
-          Issuer CommonName = CZ.NIC SHA2 Root Certification Authority
-          Issuer Organization = CZ.NIC, z.s.p.o.
-          notBefore = 2016-02-19T13:58:59Z
-          notAfter = 2026-02-16T13:58:59Z
-          Subject CommonName = CZ.NIC SHA2 Root Certification Authority
-          Subject Organization = CZ.NIC, z.s.p.o.
-          pkey sha256 [nomatch] <- 2 1 1 eac0fdbe097f...81ab000c2955
-    bh.nic.cz. IN A 217.31.204.252 ; AD=1 NoError
-    bh.nic.cz. IN AAAA ? ; AD=1 NODATA
-    _25._tcp.bh.nic.cz. IN TLSA 3 1 1 4f9736249ab5...6194f5bb2e09 ; AD=1 NoError
-    0
+## Common failure reasons
 
-## Examples
-
-### STARTTLS not offered
-
-Here STARTTLS is not offered (to at least some SMTP clients), even though
-TLSA records are published:
-
-    $ danecheck rnrfunco.net
-    rnrfunco.net. IN MX 10 tusk.sgt.com. ; AD=1 NoError
-    tusk.sgt.com. IN A 204.107.130.104 ; AD=1 NoError
-    tusk.sgt.com. IN AAAA ? ; AD=1 NODATA
-    _25._tcp.tusk.sgt.com. IN TLSA 3 0 1 bd60df4cc8c2...50ac0045659f ; AD=1 NoError
-      tusk.sgt.com[204.107.130.104]: STARTTLS not offered
-
-### No matching TLSA records
-
-Here none of the TLSA record match the certificate chain:
-
-    $ danecheck dipietro.id.au
-    dipietro.id.au. IN MX 10 mail.dipietro.id.au. ; AD=1 NoError
-    mail.dipietro.id.au. IN A 14.203.171.177 ; AD=1 NoError
-    mail.dipietro.id.au. IN AAAA ? ; AD=1 NODATA
-    _25._tcp.mail.dipietro.id.au. IN TLSA 3 1 1 7bf7ea3b070b...34e1e0044e6d ; AD=1 NoError
-      mail.dipietro.id.au[14.203.171.177]: fail: TLSA mismatch
-        TLS = TLS12 with ECDHE-RSA-AES256GCM-SHA384
-        name = cloud.dipietro.id.au
-        name = dipietro.id.au
-        name = mail.dipietro.id.au
-        name = www.dipietro.id.au
-        name = xmpp.dipietro.id.au
-        depth = 0
-          Issuer CommonName = Let's Encrypt Authority X3
-          Issuer Organization = Let's Encrypt
-          notBefore = 2017-07-27T01:31:00Z
-          notAfter = 2017-10-25T01:31:00Z
-          Subject CommonName = dipietro.id.au
-          pkey sha256 [nomatch] <- 3 1 1 51955a5a7b2e...7b158b18db73
-        depth = 1
-          Issuer CommonName = DST Root CA X3
-          Issuer Organization = Digital Signature Trust Co.
-          notBefore = 2016-03-17T16:40:46Z
-          notAfter = 2021-03-17T16:40:46Z
-          Subject CommonName = Let's Encrypt Authority X3
-          Subject Organization = Let's Encrypt
-          pkey sha256 [nomatch] <- 2 1 1 60b87575447d...0517616e8a18
-
-### TLSA Lookups ServFail
-
-Here TLSA record lookups ServFail due to a buggy nameserver:
-
-    $ danecheck truman.edu
-    truman.edu. IN DS 52166 5 1 fc1b03d050bf...a69d7ed8676d ; AD=1 NoError
-    truman.edu. IN DNSKEY 256 3 5 AwEAAdKNi1TB...RSK2WheyT8zF ; AD=1 NoError
-    truman.edu. IN DNSKEY 257 3 5 AwEAAZianXgr...ZXk7AnTMbHM= ; AD=1 NoError
-    truman.edu. IN MX 5 barracuda.truman.edu. ; AD=1 NoError
-    barracuda.truman.edu. IN A 150.243.160.93 ; AD=1 NoError
-    barracuda.truman.edu. IN AAAA ? ; AD=0 ServFail
-    _25._tcp.barracuda.truman.edu. IN TLSA ? ; AD=0 ServFail
+- Certificates not matching TLSA records
+- No SMTP service on a subset of MX host IP addresses
+- STARTTLS not offered
+- TLSA Lookups ServFail
+- Invalid MX hostname (only MX hosts with "LDH" labels are
+  considered valid).
+- MX target resolving to an IANA special-purpose IPv4 or IPv6
+  address (RFC1918 private space, loopback, 6to4 of any of the
+  above, etc.) — overridable with `-R` for testing on internal
+  networks

@@ -5,23 +5,26 @@ module Dane.Scanner.SMTP.Chain
     ( getAddrChains
     , AddrChain(..)
     , PeerChain(..)
+    , PeerProbe(..)
     , SmtpState(..)
     )
   where
 
-import           Control.Exception (Exception, SomeException, toException)
+import           Control.Exception (displayException)
 import           Control.Monad (when)
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Trans.State.Strict (gets)
 
-import qualified Data.ByteString.Char8 as BC (map, unpack, unsnoc)
+import qualified Data.ByteString.Char8 as BC (unpack)
+import qualified Data.ByteString.Short as SB
 import           Data.Char (toLower)
 import           Data.IORef (readIORef)
-import           Data.IP (AddrRange, IPv4, IPv6, isMatchedTo, makeAddrRange, toIPv4, toIPv6)
+import           Data.IP ( AddrRange, IP(IPv4, IPv6), IPv4, IPv6
+                          , isMatchedTo, makeAddrRange, toIPv4, toIPv6 )
 import           Data.Int (Int64)
 import           Data.List (find)
 import           Data.Maybe (isJust, isNothing)
-import           Network.DNS (Domain, RData(..))
+import           Net.DNSBase ( Domain, T_tlsa, X_tlsa(..) )
 import           Network.HostName (getHostName)
 import qualified Network.TLS as TLS
 
@@ -37,7 +40,7 @@ import           Dane.Scanner.SMTP.Proto
 import           Dane.Scanner.SMTP.TLS
 
 data AddrChain = AddrChain
-    { peerAddr  :: !RData
+    { peerAddr  :: !IP
     , peerChain :: PeerChain
     }
 
@@ -57,20 +60,39 @@ instance Show MatchStatus where
     show Noname = "name-mismatch"
     show Notime = "cert-expired"
 
-data PeerChain =
-    PeerChain
-        { peerNames      :: [TLS.HostName]
-        , peerCerts      :: [CertInfo]
-        , matchName      :: Maybe TLS.HostName
-        , matchDepth     :: Maybe Int
-        , matchStatus    :: !MatchStatus
-        , peerTime       :: !Int64
-        , peerTlsVersion :: !TLS.Version
-        , peerTlsCipher  :: !TLS.Cipher
-        , peerTlsGroup   :: !(Maybe TLS.Group)
-        }
-  | SmtpError SmtpState Int String
-  | ChainException SomeException
+-- | Outcome of an SMTP probe at one IP address.
+data PeerChain
+    = Probed PeerProbe
+      -- ^ TLS handshake completed.  Carries the per-probe details
+      -- (TLS info, presented names, cert chain, TLSA-match result,
+      -- time observed) in a separate 'PeerProbe' record so the
+      -- error variants stay flat and the printer can destructure
+      -- the success case in one step.
+    | SmtpError SmtpState Int String
+      -- ^ SMTP protocol or TLS handshake error.  The 'Int' is the
+      -- SMTP response code or one of the negative sentinels: @-1@
+      -- for handshake failure or connection reset, @-2@ for
+      -- EOF\/recv error, @-3@ for send error.  The 'String' carries
+      -- whatever message the server or stack provided (often empty
+      -- for the negative-code paths).
+    | ChainException String
+      -- ^ Unhandled exception during the probe.  Pre-rendered to a
+      -- 'String' via 'displayException' at capture time so the
+      -- 'PeerChain' value carries no existential dictionary.
+
+-- | Probe-success details captured after a successful STARTTLS
+-- handshake.
+data PeerProbe = PeerProbe
+    { peerNames      :: [TLS.HostName]
+    , peerCerts      :: [CertInfo]
+    , matchName      :: Maybe TLS.HostName
+    , matchDepth     :: Maybe Int
+    , matchStatus    :: !MatchStatus
+    , peerTime       :: !Int64
+    , peerTlsVersion :: !TLS.Version
+    , peerTlsCipher  :: !TLS.Cipher
+    , peerTlsGroup   :: !(Maybe TLS.Group)
+    }
 
 -- | https://www.iana.org/assignments/iana-ipv4-special-registry
 --
@@ -130,11 +152,11 @@ reserved6 = map (makeAddrRange <$> toIPv6 . fst <*> snd)
     , ( [0x2002,0xf000,0,0,0,0,0,0], 20 )      -- RFC1112
     ]
 
-getAddrChains :: Domain   -- MX hostname
-              -> Domain   -- TLSA base domain
-              -> [Domain] -- DNS reference identifiers
-              -> [RData]  -- Host TLSA rdata
-              -> [RData]  -- host address rdata
+getAddrChains :: Domain    -- MX hostname
+              -> Domain    -- TLSA base domain
+              -> [Domain]  -- DNS reference identifiers
+              -> [T_tlsa]  -- Host TLSA rdata, typed
+              -> [IP]      -- Host addresses (already converted from T_a/T_aaaa)
               -> Scanner [AddrChain]
 getAddrChains mx base names tlsards addrs = do
     opts <- gets scannerOpts
@@ -144,78 +166,81 @@ getAddrChains mx base names tlsards addrs = do
     then return []
     else mapM perAddr addrs
   where
-    perAddr :: RData -> Scanner AddrChain
+    perAddr :: IP -> Scanner AddrChain
     perAddr a = do
         allow <- gets $ Opts.useReserved . scannerOpts
         case a of
-            (RD_A ipaddr)
-                | not allow && any (isMatchedTo ipaddr) reserved4
+            IPv4 ip4
+                | not allow && any (isMatchedTo ip4) reserved4
                 -> scannerFail $ AddrChain a $ SmtpError CONNECT (-1) ""
                 | otherwise -> doAddr base names tlsards a
-            (RD_AAAA ipaddr)
-                | not allow && any (isMatchedTo ipaddr) reserved6
+            IPv6 ip6
+                | not allow && any (isMatchedTo ip6) reserved6
                 -> scannerFail $ AddrChain a $ SmtpError CONNECT (-1) ""
                 | otherwise -> doAddr base names tlsards a
-            _   -> scannerFail $ AddrChain a $ ChainException unsupported
-    unsupported = toException $ userError "Unsupported address family"
 
 doAddr :: Domain        -- TLSA base domain
        -> [Domain]      -- DNS reference identifiers
-       -> [RData]       -- TLSA RRset data
-       -> RData         -- address record RDATA
+       -> [T_tlsa]      -- TLSA RRset data, typed
+       -> IP            -- peer address
        -> Scanner AddrChain
 doAddr base refnames tlsards peerAddr = do
   opts <- gets scannerOpts
   helo <- maybe (liftIO getHostName) return $ Opts.smtpHelo opts
-  let basenm = d2s base
-      tout = Opts.smtpTimeout opts * 1000
-      llen = Opts.smtpLineLen opts
-  ipConn peerAddr 25 tout $ \conn ->
-    case conn of
-      Left IOError{..} -> case ioe_type of
-        TimeExpired -> scannerFail () >> notime
-        _           -> scannerFail () >> noconn
-      Right sock -> do
-        st <- liftIO $ dosmtp =<< startState helo basenm tout llen sock
-        peerChain <- case (smtpErr st) of
-          DataErr err     -> scannerFail $ mkex $ errLoc err st
-          OtherErr e      -> scannerFail $ ChainException e
-          ProtoErr code m -> scannerFail $ SmtpError (smtpState st) code $ b2s m
-          TlsHandError t  -> scannerFail $ SmtpError (smtpState st) (-1) $ show t
-          TlsRecvError    -> scannerFail $ SmtpError (smtpState st) (-2) ""
-          TlsSendError    -> scannerFail $ SmtpError (smtpState st) (-3) ""
-          SmtpOK
-            | SmtpTLS ctx <- smtpConn st
-            -> do
-              (peerNames, peerCerts, peerTime) <- liftIO $ readIORef (chainRef st)
-              (peerTlsVersion, peerTlsCipher, peerTlsGroup) <- liftIO $ tlsInfo ctx
-              let Opts.Opts { Opts.addDays = off
-                            , Opts.eeChecks = eechecks
-                            } = opts
-                  matchName = namecheck refnames peerNames
-                  vtime = peerTime + (fromIntegral off) * 86400
-                  (d, s) = tlsamatch eechecks matchName vtime tlsards peerCerts
-              when (s /= Pass) $ scannerFail ()
-              return PeerChain{matchDepth = d, matchStatus = s, ..}
-            | otherwise
-            -> scannerFail $ SmtpError STARTTLS 0 ""
-        return AddrChain{..}
+  let basenm   = d2s base
+      tout     = Opts.smtpTimeout opts * 1000
+      llen     = Opts.smtpLineLen opts
+      eechecks = Opts.eeChecks opts
+      addOff   = Opts.addDays opts
+      sigAlgs  = Opts.sigAlgs opts
+  -- Run the connect + SMTP + TLS + cert capture as a pure 'IO'
+  -- action inside the 'ipConn' bracket; the 'Scanner' state
+  -- update is then a single 'scannerFail' driven by the @isOK@
+  -- flag returned from the closure.
+  (peerChain, isOK) <- liftIO $ ipConn peerAddr 25 tout \case
+    Left IOError{..} -> case ioe_type of
+      TimeExpired -> pure (SmtpError CONNECT   0 "", False)
+      _           -> pure (SmtpError CONNECT 500 "", False)
+    Right sock -> do
+      st <- dosmtp =<< startState sigAlgs helo basenm tout llen sock
+      case smtpErr st of
+        DataErr err     -> pure ( ChainException $ displayException $ errLoc err st
+                                , False )
+        OtherErr e      -> pure ( ChainException $ displayException e
+                                , False )
+        ProtoErr code m -> pure ( SmtpError (smtpState st) code $ b2s m
+                                , False )
+        TlsHandError t  -> pure ( SmtpError (smtpState st) (-1) $ show t
+                                , False )
+        TlsRecvError    -> pure ( SmtpError (smtpState st) (-2) ""
+                                , False )
+        TlsSendError    -> pure ( SmtpError (smtpState st) (-3) ""
+                                , False )
+        SmtpOK
+          | SmtpTLS ctx <- smtpConn st -> do
+              (peerNames, peerCerts, peerTime) <- readIORef (chainRef st)
+              (peerTlsVersion, peerTlsCipher, peerTlsGroup) <- tlsInfo ctx
+              let matchName = namecheck refnames peerNames
+                  vtime     = peerTime + fromIntegral addOff * 86400
+                  (d, s)    = tlsamatch eechecks matchName vtime tlsards peerCerts
+              pure ( Probed PeerProbe{matchDepth = d, matchStatus = s, ..}
+                   , s == Pass )
+          | otherwise
+              -> pure (SmtpError STARTTLS 0 "", False)
+  when (not isOK) $ scannerFail ()
+  return AddrChain { peerAddr = peerAddr, peerChain = peerChain }
   where
-    mkex :: Exception e => e -> PeerChain
-    mkex = ChainException . toException
-
-    notime = let peerChain = SmtpError CONNECT 0 "" in return AddrChain{..}
-
-    noconn = let peerChain = SmtpError CONNECT 500 "" in return AddrChain{..}
-
     b2s = BC.unpack
 
+    -- Match a TLS peer-presented name (already a 'String') against
+    -- the DNS reference identifiers (canonicalised through 'd2s').
+    -- Wildcard handling follows RFC 6125: '*' matches at the first
+    -- label only, and only when the remainder has at least two
+    -- labels (so '*.example' doesn't match the apex).
     namecheck :: [Domain] -> [String] -> Maybe String
     namecheck [] _ = Nothing
     namecheck (d:ds) names =
-        let dom = BC.unpack $ BC.map toLower $ case BC.unsnoc d of
-                Just (i, l) | l == '.' -> i
-                _           -> d
+        let dom = d2s d
             match = find ((== dom) . map toLower) names
         in case match of
            Just  _ -> match
@@ -227,19 +252,24 @@ doAddr base refnames tlsards peerAddr = do
                    -> wild
                    | otherwise -> namecheck ds names
 
+    -- Compare the cert's precomputed hash/SPKI bytes against the
+    -- typed TLSA RRset.  The 'ByteString' fields on 'CertHashes'
+    -- are converted to 'ShortByteString' for the 'T_TLSA' equality
+    -- check (T_TLSA's data field is short-bytestring-shaped).
     cinfomatch depth rds CertInfo{..} =
         let u = if depth == 0 then 3 else 2
-         in (RD_TLSA u 1 1 (_spki256 _hashes)) `elem` rds ||
-            (RD_TLSA u 0 1 (_cert256 _hashes)) `elem` rds ||
-            (RD_TLSA u 1 2 (_spki512 _hashes)) `elem` rds ||
-            (RD_TLSA u 0 2 (_cert512 _hashes)) `elem` rds ||
-            (RD_TLSA u 1 0 (_spki)) `elem` rds ||
-            (RD_TLSA u 0 0 (_cert)) `elem` rds
+            short = SB.toShort
+         in T_TLSA u 1 1 (short (_spki256 _hashes)) `elem` rds ||
+            T_TLSA u 0 1 (short (_cert256 _hashes)) `elem` rds ||
+            T_TLSA u 1 2 (short (_spki512 _hashes)) `elem` rds ||
+            T_TLSA u 0 2 (short (_cert512 _hashes)) `elem` rds ||
+            T_TLSA u 1 0 (short _spki)               `elem` rds ||
+            T_TLSA u 0 0 (short _cert)               `elem` rds
 
     tlsamatch :: Bool
               -> Maybe String
               -> Int64
-              -> [RData]
+              -> [T_tlsa]
               -> [CertInfo]
               -> (Maybe Int, MatchStatus)
     tlsamatch _ _ _ [] _ = (Nothing, Notlsa)
@@ -255,7 +285,7 @@ doAddr base refnames tlsards peerAddr = do
                 e = expired || fst _life > tm || snd _life < tm
             in case depth == 0 && not eechecks of
                  True  | matched -> (Just 0, Pass)
-                       | null [u | RD_TLSA u _ _ _ <- rds, u /= 3]
+                       | null [u | T_TLSA u _ _ _ <- rds, u /= 3]
                        -> (Nothing, Nomatch)
                        | otherwise
                        -> go e (depth+1) cs
@@ -267,7 +297,12 @@ doAddr base refnames tlsards peerAddr = do
                        | otherwise
                        -> go e (depth+1) cs
 
-    usable rds = [ u | RD_TLSA u s m _ <- rds
+    -- A TLSA RRset is "usable" if any record has a usage from
+    -- {DANE-TA, DANE-EE} = {2, 3}, a selector from {Cert, SPKI} =
+    -- {0, 1}, and a matching type from {Full, SHA-256, SHA-512} =
+    -- {0, 1, 2}.  Now pattern-matches on typed 'T_TLSA' record
+    -- syntax instead of the old 'RD_TLSA' constructor.
+    usable rds = [ u | T_TLSA u s m _ <- rds
                  , u `elem` [2,3]
                  , s `elem` [0,1]
                  , m `elem` [0,1,2] ]

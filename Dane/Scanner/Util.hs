@@ -2,14 +2,11 @@
 
 module Dane.Scanner.Util
   ( bs2hex
-  , cons2
   , d2s
   , gettime
   , headDef
   , if_
-  , justHead
   , nonempty
-  , pair
   , rootOrTLD
   ) where
 
@@ -18,10 +15,11 @@ import           Foreign.C.Types (CTime(..))
 
 import qualified Data.ByteString.Builder as LB
 import           Data.ByteString.Char8 (ByteString)
-import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as LB
-import           Data.Char (toLower)
 import           Data.Int (Int64)
+
+import           Net.DNSBase (Domain, canonicalise, labelCount, toHost)
+import           Net.DNSBase.Present (presentString)
 
 
 -- | Hexadecimal representation of the input ByteString as a new ByteString
@@ -31,19 +29,13 @@ bs2hex = LB.toStrict . LB.toLazyByteString . LB.byteStringHex
 {-# INLINE bs2hex #-}
 
 
--- | Convert mixed-case ByteString domains that typically end in a trailing '.'
---   to lower-case strings with no trailing '.'.
-d2s :: ByteString -> String
-d2s d = BC.unpack $ BC.map toLower $ case BC.unsnoc d of
-    Just (i, l) | l == '.'
-                -> i
-    _           -> d
-
-
--- | Prepend two elements to a list
---
-cons2 :: a -> a -> [a] -> [a]
-cons2 a1 a2 as = a1 : a2 : as
+-- | Render a 'Domain' as its canonical lowercase 'String' form,
+-- with no trailing dot.  Calls 'canonicalise' to lowercase the
+-- domain, then 'toHost' to drop the trailing root label, then
+-- 'presentString' to materialise the bytes.  Not valid on the
+-- root domain; callers know they're working with host names.
+d2s :: Domain -> String
+d2s d = presentString (toHost (canonicalise d)) mempty
 
 
 -- | Get POSIX time (in a more usable form)
@@ -68,15 +60,6 @@ if_ False _ y = y
 {-# INLINE if_ #-}
 
 
--- | Wrap the head of a list in the Maybe monad, defaulting to Nothing for
--- empty lists
---
-justHead :: [a] -> Maybe a
-justHead [] = Nothing
-justHead (h:_) = Just h
-{-# INLINE justHead #-}
-
-
 -- | Macro for not @null@
 --
 nonempty :: [a] -> Bool
@@ -85,19 +68,11 @@ nonempty _ = True
 {-# INLINE nonempty #-}
 
 
--- | Make a two element list
+-- | Test whether a domain is either the root domain ".", or is
+-- a TLD and therefore has only one label.
 --
-pair :: a -> a -> [a]
-pair x y = [x, y]
-{-# INLINE pair #-}
-
-
--- | Test whether a domain is either the root domain ".", or is a TLD and
--- therefore has no nonfinal "."
---
-rootOrTLD :: ByteString -> Maybe ByteString
-rootOrTLD b =
-    if (BC.null b) then Just "."
-    else if (BC.notElem '.' $ BC.init b) then Just b
-    else Nothing
+rootOrTLD :: Domain -> Maybe Domain
+rootOrTLD d
+    | labelCount d <= 1 = Just d
+    | otherwise         = Nothing
 {-# INLINE rootOrTLD #-}

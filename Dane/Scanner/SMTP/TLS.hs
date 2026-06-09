@@ -11,44 +11,45 @@ module Dane.Scanner.SMTP.TLS
   , tlsInfo
   ) where
 
-import           System.Timeout.Lifted (timeout)
-
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as LB
+import qualified Data.List as L
+import qualified Data.X509.CertificateStore as X509
+import qualified Network.TLS as TLS
+import qualified Network.TLS.Extra as TLS
+import qualified Network.TLS.Extra.CipherCBC as TLS
+import qualified Streaming.ByteString as Q
 import           Control.Applicative ((<|>))
-import           Control.Exception.Safe (Handler(..), catches, toException)
-import           Control.Monad.Base (liftBase)
+import           Control.Exception (Handler(..), catches, toException)
+import           Control.Monad ((>=>))
+import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.State.Strict (gets, modify')
-import           Data.ByteString.Char8 (ByteString)
-import qualified Data.ByteString.Char8 as BC
-import qualified Data.ByteString.Lazy as LB
-import           Data.Conduit (ConduitT, Void, await, yield)
 import           Data.Default.Class
 import           Data.Function ((&))
 import           Data.IORef (IORef)
-import qualified Data.List as L
 import           Data.Maybe (isJust)
-import qualified Data.X509.Validation as X509
-import qualified Data.X509.CertificateStore as X509
 import           Network.Socket (Socket)
 import           Network.TLS (Version(TLS12, TLS13))
-import qualified Network.TLS as TLS
-import qualified Network.TLS.Extra as TLS
+import           System.Timeout (timeout)
 
+import           Dane.Scanner.Opts (SigAlgs(..), SigAlgGroup(..))
 import           Dane.Scanner.SMTP.Certs
 import           Dane.Scanner.SMTP.Internal
 
 -- callback args: serviceid fingerprint certificate
-nullCache :: X509.ValidationCache
+nullCache :: TLS.ValidationCache
 nullCache = TLS.ValidationCache
   { TLS.cacheQuery = \_ _ _ -> return TLS.ValidationCacheUnknown
   , TLS.cacheAdd   = \_ _ _ -> return ()
   }
 
-tlsParams :: String
+tlsParams :: SigAlgs
+          -> String
           -> IORef ChainInfo
           -> X509.CertificateStore
           -> TLS.ClientParams
-tlsParams host cref store =
+tlsParams sigAlgs host cref store =
   (TLS.defaultParamsClient host "smtp")
       { TLS.clientUseServerNameIndication = True
       , TLS.clientHooks = def
@@ -72,12 +73,43 @@ tlsParams host cref store =
           , TLS.supportedFallbackScsv = False
           , TLS.supportedEmptyPacket = True
           , TLS.supportedGroups = chooseGS (TLS.supportedGroups d)
+          , TLS.supportedHashSignatures = case sigAlgs of
+                SigAlgs [] -> TLS.supportedHashSignatures d
+                SigAlgs gs -> concatMap sigAlgsFor gs
           }
       , TLS.clientWantSessionResume = Nothing    -- no session to resume
       , TLS.clientDebug = def                    -- Can override DRBG seed
       , TLS.clientWantTicket = False
       }
   where
+    -- Expand a named group to its (HashAlgorithm, SignatureAlgorithm)
+    -- pairs.  RSA covers both TLS 1.3 (RSA-PSS-RSAE) and TLS 1.2
+    -- (RSA-PKCS#1) variants; ECDSA covers the three NIST P-curves;
+    -- EdDSA covers Ed25519 and Ed448.  Within each group the pairs
+    -- are listed in the conventional SHA-256\/384\/512 order; the
+    -- caller controls the group-level order via the @--sigalgs@
+    -- option, and the TLS library honours that order when offering
+    -- algorithms to the server.
+    sigAlgsFor :: SigAlgGroup -> [(TLS.HashAlgorithm, TLS.SignatureAlgorithm)]
+    sigAlgsFor SigEcdsa = (,) <$> [ TLS.HashSHA256
+                                  , TLS.HashSHA384
+                                  , TLS.HashSHA512 ]
+                              <*> [ TLS.SignatureECDSA ]
+    sigAlgsFor SigRsa   = -- TLS 1.3 RSA-PSS-RSAE
+                          ((,) TLS.HashIntrinsic <$>
+                              [ TLS.SignatureRSApssRSAeSHA256
+                              , TLS.SignatureRSApssRSAeSHA384
+                              , TLS.SignatureRSApssRSAeSHA512 ])
+                          ++
+                          -- TLS 1.2 RSA-PKCS#1
+                          ((,) <$> [ TLS.HashSHA256
+                                   , TLS.HashSHA384
+                                   , TLS.HashSHA512 ]
+                               <*> [ TLS.SignatureRSA ])
+    sigAlgsFor SigEdDsa = (,) TLS.HashIntrinsic <$>
+                              [ TLS.SignatureEd25519
+                              , TLS.SignatureEd448 ]
+
     -- Add some DHE TLS 1.2 ciphers, with the AES128 choice first
     chooseCS :: [TLS.Cipher]
     chooseCS =
@@ -85,6 +117,8 @@ tlsParams host cref store =
         case L.uncons $ reverse TLS.ciphersuite_dhe_rsa of
             Just (l, cs) -> l : reverse cs
             Nothing       -> []
+        ++ TLS.ciphersuite_pfs_sha2_cbc
+
     chooseGS :: [TLS.Group] -> [TLS.Group]
     chooseGS = go False
       where
@@ -117,26 +151,24 @@ tlsParams host cref store =
         go _ (Just g) _ = [g]
         go _ _ _        = []
 
-tlsSource :: ConduitT () ByteString SmtpM ()
-tlsSource = do
-  conn <- lift $ gets smtpConn
-  case conn of
+-- | Read decrypted records off the TLS context and produce a
+-- 'ByteStream' for downstream consumers.  Errors, EOF and
+-- timeouts are recorded in 'smtpErr' and terminate the stream.
+tlsSource :: Q.ByteStream SmtpM ()
+tlsSource = lift (gets smtpConn) >>= \ case
     SmtpTLS ctx -> go ctx
     _           -> error "Non-TLS channel"
   where
     go ctx = do
-      res <- lift $ timeLeft >>= flip timeout (doRecv ctx)
-      case res of
-        Just x
-          | Right bs <- x
-          -> if (BC.length bs > 0)
-             then yield bs >> go ctx
-             else lift $ modify' $
-               \s -> s { smtpErr = DataErr $ eofErr "TLS read" }
-          | Left e  <- x
-          -> lift $ modify' $ \s -> s { smtpErr = e }
-        _ -> lift $ modify' $
-               \s -> s { smtpErr = DataErr $ timeErr "TLS read" }
+        tm <- lift timeLeft
+        liftIO (timeout tm (doRecv ctx)) >>= \ case
+            Just (Right bs)
+                | B.length bs > 0 -> Q.chunk bs >> go ctx
+                | otherwise
+                  -> lift $ modify' \s -> s { smtpErr = DataErr $ eofErr "TLS read" }
+            Just (Left e)
+                  -> lift $ modify' \s -> s { smtpErr = e }
+            _     -> lift $ modify' \s -> s { smtpErr = DataErr $ timeErr "TLS read" }
 
     doRecv ctx = (Right <$> TLS.recvData ctx) `catches`
         [ Handler handleTLS, Handler handleIO ]
@@ -147,23 +179,22 @@ tlsSource = do
 
     handleIO e = return $ Left $ DataErr e
 
-tlsSink :: ConduitT ByteString Void SmtpM ()
-tlsSink = do
-  conn <- lift $ gets smtpConn
-  case conn of
-    SmtpTLS ctx -> go ctx
-    _           -> error "Non-TLS channel"
+-- | Consume a 'ByteStream' and write each chunk through the TLS
+-- context.  Errors and timeouts are recorded in 'smtpErr' and
+-- stop the loop.
+tlsSink :: Q.ByteStream SmtpM () -> SmtpM ()
+tlsSink str = gets smtpConn >>= \ case
+    SmtpTLS ctx -> go ctx str
+    _           -> fail "Non-TLS channel"
   where
-    go ctx = await >>= ( maybe (return ()) $ \bs -> do
-      res <- lift $ timeLeft >>= flip timeout (doSend ctx bs)
-      case res of
-        Just x
-          | Right _ <- x -> go ctx
-          | Left e  <- x
-          -> lift $ modify' $ \s -> s { smtpErr = e }
-        _ -> lift $ modify' $
-               \s -> s { smtpErr = DataErr $ timeErr "TLS write" }
-      )
+    go ctx = Q.unconsChunk >=> \ case
+        Right (bs, bss) -> do
+            tm <- timeLeft
+            liftIO (timeout tm (doSend ctx bs)) >>= \ case
+                Just (Right _) -> go ctx bss
+                Just (Left e)  -> modify' \s -> s { smtpErr = e }
+                _              -> modify' \s -> s { smtpErr = DataErr $ timeErr "TLS write" }
+        Left () -> pure ()
 
     doSend ctx bs = (Right <$> TLS.sendData ctx (LB.fromStrict bs)) `catches`
         [ Handler handleTLS, Handler handleIO ]
@@ -175,19 +206,16 @@ tlsSink = do
     handleIO e = return $ Left $ DataErr e
 
 endTLS :: SmtpM ()
-endTLS = do
-  conn <- gets smtpConn
-  case conn of
+endTLS = gets smtpConn >>= \ case
     SmtpTLS ctx -> go ctx
     _           -> error "Non-TLS channel"
   where
     go ctx = do
-      res <- timeLeft >>= flip timeout (doBye ctx)
-      case res of
-        Just x
-          | Right _ <- x -> return ()
-          | Left  e <- x -> modify' $ \s -> s { smtpErr = e }
-        _ -> modify' $ \s -> s { smtpErr = DataErr $ timeErr "shutdown" }
+        tm <- timeLeft
+        liftIO (timeout tm (doBye ctx)) >>= \ case
+            Just (Right _) -> pure ()
+            Just (Left  e) -> modify' \s -> s { smtpErr = e }
+            _              -> modify' \s -> s { smtpErr = DataErr $ timeErr "shutdown" }
 
     doBye ctx = (Right <$> TLS.bye ctx) `catches`
         [ Handler handleTLS, Handler handleIO ]
@@ -206,9 +234,7 @@ hasTLS :: ProtoState -> Bool
 hasTLS = isJust . connTLS . smtpConn
 
 startTLS :: SmtpM ()
-startTLS = do
-  conn <- gets smtpConn
-  case conn of
+startTLS = gets smtpConn >>= \ case
     SmtpPlain sock -> go sock
     _              -> error "Non-plaintext channel"
   where
@@ -216,25 +242,21 @@ startTLS = do
     go sock = do
       servername <- gets serverName
       cref <- gets chainRef
+      sigAlgs <- gets tlsSigAlgs
       store <- getStore Nothing
-      ctx <- TLS.contextNew sock $ tlsParams servername cref store
+      ctx <- TLS.contextNew sock $ tlsParams sigAlgs servername cref store
       tmout <- gets smtpTimeout
-      res <- timeout tmout (doHandshake ctx)
-      case res of
-        Just x
-          | Right _ <- x
-          -> do
-             deadline <- liftBase $ timeLimit tmout
-             modify' $
-                 \s -> s { smtpConn = SmtpTLS ctx, ioDeadline = deadline }
-          | Left e  <- x
-          -> modify' $ \s -> s { smtpErr = e }
-        _ -> modify' $ \s -> s { smtpErr = DataErr $ timeErr "handshake" }
+      liftIO (timeout tmout (doHandshake ctx)) >>= \ case
+          Just (Right _) -> do
+              deadline <- liftIO $ timeLimit tmout
+              modify' \s -> s { smtpConn = SmtpTLS ctx, ioDeadline = deadline }
+          Just (Left e)  -> modify' \s -> s { smtpErr = e }
+          _              -> modify' \s -> s { smtpErr = DataErr $ timeErr "handshake" }
 
     getStore :: Maybe FilePath -> SmtpM X509.CertificateStore
     getStore cafp =
         maybe (return Nothing)
-              (\fp -> liftBase $ X509.readCertificateStore fp) cafp >>=
+              (\fp -> liftIO $ X509.readCertificateStore fp) cafp >>=
         return . maybe (X509.makeCertificateStore []) id
 
     doHandshake ctx = (Right <$> TLS.handshake ctx) `catches`

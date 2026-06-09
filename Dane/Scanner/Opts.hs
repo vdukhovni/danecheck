@@ -1,11 +1,42 @@
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Dane.Scanner.Opts (Opts(..), getOpts) where
+module Dane.Scanner.Opts
+    ( Opts(..)
+    , SigAlgs(..)
+    , SigAlgGroup(..)
+    , getOpts
+    ) where
 
 import           Options.Applicative
-import           Data.Char (toLower)
+import           Data.Char (isSpace, toLower)
+import           Data.List (intercalate)
 import           Data.Word (Word16)
+
+-- | Named signature-algorithm groups offered to the server.
+-- Each group expands at TLS-config time to a list of
+-- @(HashAlgorithm, SignatureAlgorithm)@ pairs covering the
+-- common SHA-256\/384\/512 variants within the family.  The
+-- friendly group names give users a stable handle to refer to a
+-- family without having to spell out (or remember) the individual
+-- sig-alg codepoint names.  Future post-quantum families (e.g. an
+-- @mldsa@ group covering ML-DSA-44\/65\/87) would slot in here
+-- as additional constructors.
+data SigAlgGroup = SigEcdsa  -- ^ ECDSA over P-256, P-384, P-521
+                 | SigRsa    -- ^ RSA-PSS (TLS 1.3) + RSA-PKCS#1 (TLS 1.2)
+                 | SigEdDsa  -- ^ Ed25519 and Ed448
+    deriving (Eq, Show)
+
+-- | An ordered list of 'SigAlgGroup's, expressing the relative
+-- preference offered to the server.  The empty list means \"use
+-- the TLS library default\", i.e. no override.  A non-empty list
+-- both restricts the offered algorithms to the named groups and
+-- pins their relative order.  Hosts that publish certificates of
+-- multiple kinds can therefore be probed independently by passing
+-- a single group, or with a chosen preference order by passing
+-- two or more groups.
+newtype SigAlgs = SigAlgs { sigAlgsList :: [SigAlgGroup] }
+    deriving (Eq, Show)
 
 data Opts = Opts
   { dnsServer   :: !(Maybe String)
@@ -23,6 +54,7 @@ data Opts = Opts
   , useAll      :: !Bool
   , addDays     :: !Int
   , eeChecks    :: !Bool
+  , sigAlgs     :: !SigAlgs
   , dnsDomain   :: !String
   }
 
@@ -48,7 +80,7 @@ parser = do
       ( long "timeout"
      <> short 't'
      <> metavar "TIMEOUT"
-     <> value 3000
+     <> value 5000
      <> showDefaultWith (\t -> show t ++ " ms")
      <> help "DNS request TIMEOUT" )
 
@@ -56,7 +88,7 @@ parser = do
       ( long "tries"
      <> short 'r'
      <> metavar "NUMTRIES"
-     <> value 6
+     <> value 3
      <> showDefault
      <> help "at most NUMTRIES requests per lookup" )
 
@@ -64,7 +96,7 @@ parser = do
       ( long "udpsize"
      <> short 'u'
      <> metavar "SIZE"
-     <> value 1216
+     <> value 1400
      <> showDefault
      <> help "set EDNS UDP buffer SIZE" )
 
@@ -134,6 +166,17 @@ parser = do
      <> short 'e'
      <> help "check end-entity (leaf) certificate dates and names" )
 
+    sigAlgs <- option (eitherReader parseSigAlgs)
+      ( long "sigalgs"
+     <> metavar "GROUPS"
+     <> value (SigAlgs [])
+     <> showDefaultWith showSigAlgs
+     <> help "Comma-separated ordered list of TLS signature-algorithm \
+             \groups, drawn from 'rsa', 'ecdsa' and 'eddsa'; restricts \
+             \the offered algorithms and pins their relative order.  \
+             \Use 'any' or the empty string for the TLS library \
+             \defaults (the default)." )
+
     dnsDomain <- strArgument
       ( metavar "DOMAIN"
      <> value "."
@@ -141,6 +184,39 @@ parser = do
      <> help "check the specified DOMAIN" )
 
     return Opts{..}
+
+-- | Parse the @--sigalgs@ argument:  a comma-separated, case-
+-- insensitive list of named groups, with whitespace tolerated.
+-- The literal string @any@ (or an empty string) yields
+-- @SigAlgs []@, meaning \"no override\".
+parseSigAlgs :: String -> Either String SigAlgs
+parseSigAlgs s
+    | null trimmed                    = Right (SigAlgs [])
+    | map toLower trimmed == "any"    = Right (SigAlgs [])
+    | otherwise = SigAlgs <$> traverse parseOne (splitComma trimmed)
+  where
+    trimmed = dropWhile isSpace $ reverse $ dropWhile isSpace $ reverse s
+    splitComma xs = case break (== ',') xs of
+        (h, ',':t) -> trim h : splitComma t
+        (h, _)     -> [trim h]
+    trim = dropWhile isSpace . reverse . dropWhile isSpace . reverse
+    parseOne g = case map toLower g of
+        "rsa"   -> Right SigRsa
+        "ecdsa" -> Right SigEcdsa
+        "eddsa" -> Right SigEdDsa
+        ""      -> Left "empty sig-alg group name"
+        _       -> Left $ "unknown sig-alg group: " ++ show g
+                       ++ " (expected one of rsa, ecdsa, eddsa)"
+
+-- | Pretty-print a 'SigAlgs' value for the @--help@ default
+-- display.
+showSigAlgs :: SigAlgs -> String
+showSigAlgs (SigAlgs []) = "any"
+showSigAlgs (SigAlgs gs) = intercalate "," (map groupName gs)
+  where
+    groupName SigRsa   = "rsa"
+    groupName SigEcdsa = "ecdsa"
+    groupName SigEdDsa = "eddsa"
 
 -- | Parse command-line switches
 --

@@ -6,14 +6,14 @@ module Dane.Scanner.State
     ) where
 
 import qualified Control.Monad.Trans.State.Strict as ST
-import qualified Network.DNS as DNS
+import           Net.DNSBase.Resolver (Resolver)
 
 import Dane.Scanner.Opts
 
 data ScannerSt = ScannerSt
-    { scannerOpts    :: !Opts
-    , scannerDnsSeed :: !DNS.ResolvSeed
-    , scannerOK      :: !Bool
+    { scannerOpts     :: !Opts
+    , scannerResolver :: !Resolver
+    , scannerOK       :: !Bool
     }
 
 type Scanner = ST.StateT ScannerSt IO

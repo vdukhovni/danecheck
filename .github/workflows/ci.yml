@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  # Allow manual triggering from the Actions tab
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: GHC ${{ matrix.ghc }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        ghc: ['9.10.3', '9.12.4', '9.14.1']
+        cabal: ['latest']
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up GHC ${{ matrix.ghc }} and cabal ${{ matrix.cabal }}
+        id: setup
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
+          cabal-update: true
+
+      - name: Cache cabal store
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.setup.outputs.cabal-store }}
+            dist-newstyle
+          key: cabal-${{ runner.os }}-ghc-${{ matrix.ghc }}-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+          restore-keys: |
+            cabal-${{ runner.os }}-ghc-${{ matrix.ghc }}-
+
+      - name: Configure
+        run: cabal configure --enable-tests --enable-benchmarks
+
+      - name: Build dependencies only
+        run: cabal build --only-dependencies all
+
+      - name: Build danecheck
+        run: cabal build danecheck
+
+      - name: Smoke test the binary
+        run: |
+          exe=$(cabal -v0 list-bin danecheck)
+          "$exe" --help
+
+      - name: Cabal check (Hackage-validity)
+        run: cabal check
+
+      - name: Build sdist
+        run: cabal sdist

@@ -1,5 +1,8 @@
 packages: .
 
+allow-newer:
+    base, containers, time
+
 constraints:
   base installed,
   array installed,

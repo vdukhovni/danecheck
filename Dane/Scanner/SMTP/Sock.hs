@@ -1,72 +1,61 @@
-{-# LANGUAGE FlexibleContexts #-}
-
 module Dane.Scanner.SMTP.Sock
   ( sockSource
   , sockSink
   ) where
 
-import           System.Timeout.Lifted (timeout)
-
-import           Control.Exception.Safe (tryIO)
-import           Control.Monad (when)
-import           Control.Monad.Base (liftBase)
+import qualified Data.ByteString as B
+import qualified Streaming.ByteString as Q
+import           Control.Monad ((>=>))
+import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Trans.Class (lift)
-import           Control.Monad.Trans.Control (MonadBaseControl)
-import           Control.Monad.Trans.State.Strict (gets, modify)
-import           Data.ByteString.Char8 (ByteString)
-import qualified Data.ByteString.Char8 as BS
-import           Data.Conduit (ConduitM, yield, await)
-import           Data.Void (Void)
+import           Control.Monad.Trans.State.Strict (gets, modify')
 import           Network.Socket (Socket)
 import           Network.Socket.ByteString (recv, send)
+import           System.Timeout (timeout)
 
 import           Dane.Scanner.SMTP.Internal
 
-sockWrite :: MonadBaseControl IO m => Socket -> ByteString -> m ()
-sockWrite sock bs = do
-  n <- liftBase $ send sock bs
-  when (n < BS.length bs) $ sockWrite sock $ BS.drop n bs
+-- | Write the whole bytestring to the socket, looping if 'send'
+-- only consumes a prefix.  Returns once every byte has been sent
+-- or the underlying 'send' has thrown.
+sockWrite :: Socket -> B.ByteString -> IO ()
+sockWrite sock bs = send sock bs >>= \ case
+    n | n < B.length bs -> sockWrite sock $ B.drop n bs
+      | otherwise       -> pure ()
 
-sockSink :: ConduitM ByteString Void SmtpM ()
-sockSink = do
-  conn <- lift $ gets smtpConn
-  case conn of
-      SmtpPlain sock -> go sock
-      _              -> error "Non-plaintext channel"
+-- | Consume a 'ByteStream' and push each chunk down the plaintext
+-- socket.  Errors and timeouts are recorded in 'smtpErr' and
+-- stop the loop.
+sockSink :: Q.ByteStream SmtpM () -> SmtpM ()
+sockSink str = gets smtpConn >>= \ case
+    SmtpPlain sock -> go sock str
+    _              -> fail "Non-plaintext channel"
   where
-    go sock = await >>= ( maybe (return ()) $ \bs -> do
-      res <- lift $ timeLeft >>= flip timeout (tryIO $ sockWrite sock bs)
-      case res of
-        Just x
-          | Right _ <- x -> go sock
-          | Left e  <- x
-          -> lift $ modify $
-               \s -> s { smtpErr = DataErr $ ioErr "write" e }
-        _ -> lift $ modify $
-               \s -> s { smtpErr = DataErr $ timeErr "write" }
-      )
+    go sock = Q.unconsChunk >=> \ case
+        Right (bs, bss) -> do
+            tm <- timeLeft
+            liftIO (timeout tm $ tryIO $ sockWrite sock bs) >>= \ case
+                Just (Right _) -> go sock bss
+                Just (Left e)
+                    -> modify' \s -> s { smtpErr = DataErr $ ioErr "write" e }
+                _   -> modify' \s -> s { smtpErr = DataErr $ timeErr "write" }
+        Left ()        -> pure ()
 
-sockRead :: MonadBaseControl IO m => Socket -> Int -> m ByteString
-sockRead sock n = liftBase $ recv sock n
-
-sockSource :: ConduitM () ByteString SmtpM ()
-sockSource = do
-  conn <- lift $ gets smtpConn
-  case conn of
-      SmtpPlain sock -> go sock
-      _              -> error "Non-plaintext channel"
+-- | Read chunks off the plaintext socket and produce a
+-- 'ByteStream' for downstream consumers.  EOF, errors and
+-- timeouts are recorded in 'smtpErr' and terminate the stream.
+sockSource :: Q.ByteStream SmtpM ()
+sockSource = lift (gets smtpConn) >>= \ case
+    SmtpPlain sock -> go sock
+    _              -> error "Non-plaintext channel"
   where
     go sock = do
-      res <- lift $ timeLeft >>= flip timeout (tryIO $ sockRead sock 65536)
-      case res of
-        Just x
-          | Right bs <- x
-          -> if (BS.length bs > 0)
-             then yield bs >> go sock
-             else lift $ modify $
-               \s -> s { smtpErr = DataErr $ eofErr "read" }
-          | Left e  <- x
-          -> lift $ modify $
-               \s -> s { smtpErr = DataErr $ ioErr "read" e }
-        _ -> lift $ modify $
-               \s -> s { smtpErr = DataErr $ timeErr "read" }
+        tm <- lift timeLeft
+        liftIO (timeout tm $ tryIO $ recv sock 65536) >>= \ case
+            Just (Right bs)
+                | B.length bs > 0 -> Q.chunk bs >> go sock
+                | otherwise
+                  -> lift $ modify' \s -> s { smtpErr = DataErr $ eofErr "read" }
+            Just (Left e)
+                  -> lift $ modify' \s -> s { smtpErr = DataErr $ ioErr "read" e }
+            _     -> lift $ modify' \s -> s { smtpErr = DataErr $ timeErr "read" }
