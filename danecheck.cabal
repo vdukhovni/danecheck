@@ -1,4 +1,4 @@
-cabal-version: 3.12
+cabal-version: 3.0
 
 Name:                danecheck
 Version:             1.0.0.0
