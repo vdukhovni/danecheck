@@ -1,7 +1,10 @@
 packages: .
 
+-- The "base32" package has a stale bound on "base"
+-- The "serialiase" and "cborg" dependencies of "tls" have
+-- stale bounds on "base", "containers" and "time".
 allow-newer:
-    base, containers, time
+    base32:base, cborg:base, serialise:base, serialise:containers, cborg:containers, serialise:time
 
 constraints:
   base installed,
