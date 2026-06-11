@@ -1,7 +1,7 @@
 cabal-version: 3.0
 
 Name:                danecheck
-Version:             1.0.0.0
+Version:             1.0.0.2
 Synopsis:            DANE SMTP validator
 Description:
     @danecheck@ is a diagnostic tool that verifies the
@@ -43,12 +43,13 @@ Source-Repository head
 
 Executable danecheck
   HS-Source-Dirs: "."
-  Default-Language: GHC2024
+  Default-Language: GHC2021
   GHC-Options: -Wall
   Main-Is: Dane/Scanner/Main.hs
 
   Default-Extensions:
     BlockArguments
+    LambdaCase
     MultiWayIf
     NegativeLiterals
     PatternSynonyms
